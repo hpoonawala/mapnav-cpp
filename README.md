@@ -4,6 +4,8 @@ This repo contains `C++` code for navigation using 2D LiDAR measurements only. C
 
 It contains implementations for scan matching, SLAM, path planning, pure-pursuit based tracking, and a reactive collision avoidance controller. As a by-product, it contains a wrapper around the `rplidar_sdk`. These implementations have an ancestry rooted in python versions for navigation simulations using `MuJoCo`. 
 
+![Map of suite outside my office](occupancy_grid_slam_final.png "Map of suite outside my office. Example of one of the better runs.")
+
 The aim is to demonstrate autonomous movement through an unmapped environment and to compute a map. The results are mixed. LiDAR artifacts and high angular velocities introduce mapping errors that would require human correction. For runs where these issues do not arise, the map and the planned path are quite good. Unfortunately, the current implementation does not run fast enough on a Rasberry Pi 4 to enable long-term navigation unless one tolerates a stop-motion behavior. These limitations suggest what one would expect:
 
 - Use a more powerful processor 
