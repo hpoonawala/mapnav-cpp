@@ -123,7 +123,13 @@ class TelemetryClient:
                     # Decode base64 map data
                     raw = base64.b64decode(data['data'])
                     self.map_data = np.frombuffer(raw, dtype=np.uint8).reshape(
-                        (self.map_height, self.map_width))
+                        (self.map_height, self.map_width)).copy()
+
+                elif msg_type == 'map_delta':
+                    if self.map_data is not None:
+                        for cell in data.get('cells', []):
+                            i, j, v = cell
+                            self.map_data[j, i] = v
 
                 elif msg_type == 'path':
                     self.path = [(wp['x'], wp['y']) for wp in data.get('waypoints', [])]
@@ -336,7 +342,7 @@ def main():
     client.start_receiving()
 
     # Request initial map
-    #client.request_map()
+    client.request_map()
 
     viz = TelemetryVisualization(client)
 

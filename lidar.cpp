@@ -299,15 +299,18 @@ int main(int argc, const char * argv[]) {
 
 
 	if (argc < 5) { // cmd --channel --serial port baud_rate
-		printf("Incorrect usage. ./lidar.exe --channel --serial <port> 115200");
+		printf("Incorrect usage. Use: ./lidar.exe --channel --serial <port> 115200");
 		return -1;
 	}
 
 	// Hard codes assumption that we are using SERIAL. Don't need argv[1] or 2], really.
-	const char * opt_is_channel = argv[1];
-	opt_channel = argv[2];
-	opt_channel_param_first = argv[3];
-	if (argc>4) opt_channel_param_second = strtoul(argv[4], NULL, 10);
+	const char * opt_is_channel = argv[1]; // --channel 
+	opt_channel = argv[2]; // --serial
+	opt_channel_param_first = argv[3]; // USB Port
+	if (argc>4) opt_channel_param_second = strtoul(argv[4], NULL, 10); // gets baud rate
+	sl_u32 num_steps;
+	if (argc > 5) num_steps = strtoul(argv[5], NULL, 10);
+	else num_steps=200;
 
 	// create the driver instance. Could create first thing, since it is independent of channel
 
@@ -331,11 +334,11 @@ int main(int argc, const char * argv[]) {
 	// Start telemetry server
 	TelemetryServer telemetry(8765);
 	telemetry.start();
-	Pose2D navigation_goal(2.3, -0.5, 0.0);
+	Pose2D navigation_goal(1.0,  0.0, 0.0);
 	bool navigation_paused = false;
 
 	// Start loop
-	int loop_iters = 150;
+	int loop_iters = int(num_steps);
 	sl_result lidar_result;
 	Mapper mapper;
 	DDRCappController controller({}, 0.5, 100.0, 60.0);
@@ -359,6 +362,8 @@ int main(int argc, const char * argv[]) {
 			TelemetryCommand cmd = telemetry.popCommand();
 			if (cmd.type == CommandType::SET_GOAL) {
 				navigation_goal = Pose2D(cmd.x, cmd.y, 0.0);
+				mapper.plan_path(navigation_goal);
+				telemetry.publishPath(mapper.path);
 				navigation_paused = false;
 				std::cout << "Telemetry: New goal set to (" << cmd.x << ", " << cmd.y << ")\n";
 			} else if (cmd.type == CommandType::STOP) {
@@ -371,6 +376,7 @@ int main(int argc, const char * argv[]) {
 			} else if (cmd.type == CommandType::REQUEST_MAP) {
 				telemetry.publishMap(mapper.grid);
 				telemetry.publishPath(mapper.path);
+				telemetry.tick();
 			}
 		}
 		for(int ii = 0; ii < n_samples; ii++){
@@ -387,7 +393,8 @@ int main(int argc, const char * argv[]) {
 			mapper.grid.writePGMFile("occupancy_grid_slam_" + std::to_string(k) + ".pgm");
 
 			// Publish map and path to telemetry clients
-			telemetry.publishMap(mapper.grid);
+			//telemetry.publishMap(mapper.grid);
+			telemetry.tick();
 			telemetry.publishPath(mapper.path);
 		}
 		end = std::chrono::high_resolution_clock::now();
@@ -413,8 +420,8 @@ int main(int argc, const char * argv[]) {
 
 	// Run slam 
 	mapper.slam();
-	mapper.plan_path(Pose2D(2.3,-0.5,0.0));
-    //mapper.grid.writeGridToFile("occupancy_grid_slam.txt", 3.0, 1.5);
-    mapper.grid.writePGMFile("occupancy_grid_slam_final.pgm");
+	mapper.plan_path(navigation_goal);
+	//mapper.grid.writeGridToFile("occupancy_grid_slam.txt", 3.0, 1.5);
+	mapper.grid.writePGMFile("occupancy_grid_slam_final.pgm");
 	return 0;
 }

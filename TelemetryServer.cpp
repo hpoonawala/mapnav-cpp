@@ -18,16 +18,28 @@ TelemetryClient::TelemetryClient(asio::ip::tcp::socket socket)
     socket_.non_blocking(true);
 }
 
-void TelemetryClient::send(const std::string& message) {
+void TelemetryClient::send(const std::string& message, bool blocking) {
     if (!connected_) return;
 
     std::lock_guard<std::mutex> lock(write_mutex_);
     try {
-        // Temporarily set to blocking mode for writes to handle large messages
-        socket_.non_blocking(false);
-        asio::write(socket_, asio::buffer(message + "\n"));
-        // Set back to non-blocking for reads
-        socket_.non_blocking(true);
+        if (blocking) {
+            // Temporarily set to blocking mode for writes to handle large messages
+            socket_.non_blocking(false);
+            asio::write(socket_, asio::buffer(message + "\n"));
+            // Set back to non-blocking for reads
+            socket_.non_blocking(true);
+        } else {
+            // Non-blocking write - drop message if it would block
+            asio::error_code ec;
+            asio::write(socket_, asio::buffer(message + "\n"), ec);
+            if (ec == asio::error::would_block) {
+                // Message dropped - next one comes soon
+            } else if (ec) {
+                connected_ = false;
+                std::cerr << "TelemetryClient send error: " << ec.message() << std::endl;
+            }
+        }
     } catch (const std::exception& e) {
         connected_ = false;
         std::cerr << "TelemetryClient send error: " << e.what() << std::endl;
@@ -232,7 +244,7 @@ bool TelemetryServer::parseCommand(const std::string& json, TelemetryCommand& cm
     return false;
 }
 
-void TelemetryServer::broadcast(const std::string& message) {
+void TelemetryServer::broadcast(const std::string& message, bool blocking) {
     std::vector<std::shared_ptr<TelemetryClient>> snapshot;
     {
         std::lock_guard<std::mutex> lock(clients_mutex_);
@@ -240,21 +252,66 @@ void TelemetryServer::broadcast(const std::string& message) {
     }
     for (auto& client : snapshot) {
         if (client->isConnected()) {
-            client->send(message);
+            client->send(message, blocking);
         }
     }
 }
 
 void TelemetryServer::publishPose(const Pose2D& pose, int scan_count) {
-    broadcast(formatPoseJson(pose, scan_count));
+    broadcast(formatPoseJson(pose, scan_count), false);
 }
 
 void TelemetryServer::publishMap(const OccupancyGrid& grid) {
-    broadcast(formatMapJson(grid));
+    auto size = grid.getGridSize();
+    int width = size.first;
+    int height = size.second;
+    double resolution = grid.getResolution();
+
+    // Build current pixel data
+    auto prob_grid = grid.probabilityGrid();
+    std::vector<uint8_t> pixels;
+    pixels.reserve(width * height);
+    for (int j = height - 1; j >= 0; j--) {
+        for (int i = 0; i < width; i++) {
+            pixels.push_back(static_cast<uint8_t>(prob_grid[i][j] * 255.0));
+        }
+    }
+
+    bool send_full = (last_sent_width_ != width || last_sent_height_ != height
+                      || last_sent_pixels_.empty());
+
+    if (!send_full) {
+        // Compute diff
+        std::vector<std::tuple<int,int,uint8_t>> changed;
+        for (int j = 0; j < height; j++) {
+            for (int i = 0; i < width; i++) {
+                int idx = j * width + i;
+                if (pixels[idx] != last_sent_pixels_[idx]) {
+                    changed.emplace_back(i, j, pixels[idx]);
+                }
+            }
+        }
+
+        size_t total = static_cast<size_t>(width) * height;
+        if (changed.size() > total / 2) {
+            send_full = true;
+        } else {
+            // Send delta (blocking to prevent partial writes corrupting the stream)
+            broadcast(formatMapDeltaJson(width, height, resolution, changed), true);
+        }
+    }
+
+    if (send_full) {
+        broadcast(formatMapJson(grid), true);
+    }
+
+    last_sent_pixels_ = std::move(pixels);
+    last_sent_width_ = width;
+    last_sent_height_ = height;
 }
 
 void TelemetryServer::publishPath(const std::vector<std::pair<double, double>>& path) {
-    broadcast(formatPathJson(path));
+    broadcast(formatPathJson(path), false);
 }
 
 bool TelemetryServer::hasCommand() {
@@ -339,6 +396,26 @@ std::string TelemetryServer::formatMapJson(const OccupancyGrid& grid) {
         << ",\"height\":" << height
         << ",\"resolution\":" << resolution
         << ",\"data\":\"" << encoded_data << "\"}";
+    return oss.str();
+}
+
+std::string TelemetryServer::formatMapDeltaJson(int width, int height, double resolution,
+                                                  const std::vector<std::tuple<int,int,uint8_t>>& cells) {
+    std::ostringstream oss;
+    oss << std::fixed << std::setprecision(4);
+    oss << "{\"type\":\"map_delta\",\"width\":" << width
+        << ",\"height\":" << height
+        << ",\"resolution\":" << resolution
+        << ",\"cells\":[";
+
+    for (size_t k = 0; k < cells.size(); k++) {
+        if (k > 0) oss << ",";
+        oss << "[" << std::get<0>(cells[k])
+            << "," << std::get<1>(cells[k])
+            << "," << static_cast<int>(std::get<2>(cells[k])) << "]";
+    }
+
+    oss << "]}";
     return oss.str();
 }
 
