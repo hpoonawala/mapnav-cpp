@@ -83,6 +83,18 @@ public:
     void transformScanInPlace(Scan&, const Scan&,
 		    double, double, double);
 
+    // Golden section search for optimal angle (faster than Nelder-Mead for 1D)
+    double goldenSectionAngleSearch(
+        const Scan& scan1,
+        const NDTGrid& ndt_grid,
+        double grid_size,
+        double tx,
+        double ty,
+        double angle_min,
+        double angle_max,
+        double tol = 0.005
+    );
+
 };
 
 #endif

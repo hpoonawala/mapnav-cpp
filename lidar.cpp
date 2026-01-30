@@ -77,6 +77,9 @@ static inline void delay(sl_word_size_t ms){
 #include <sstream>
 #include <exception>
 
+// Telemetry includes
+#include "TelemetryServer.h"
+
 using namespace sl;
 using namespace std;
 using namespace Eigen;
@@ -325,6 +328,12 @@ int main(int argc, const char * argv[]) {
 	scan_file.close();
 	scan_file.open(data_target,std::ios::app );
 
+	// Start telemetry server
+	TelemetryServer telemetry(8765);
+	telemetry.start();
+	Pose2D navigation_goal(2.3, -0.5, 0.0);
+	bool navigation_paused = false;
+
 	// Start loop
 	int loop_iters = 150;
 	sl_result lidar_result;
@@ -335,29 +344,57 @@ int main(int argc, const char * argv[]) {
 	auto duration = std::chrono::duration_cast<std::chrono::milliseconds>(end - start);
 	for(int k=0;k<loop_iters;k++){
 		printf("Loop: %d / %d\n",k,loop_iters); 
+		telemetry.tick();
 		lidar_result = lidarScanner.capture(scan_curr,n_samples,quality); // fills scan_curr with polar version
+
 		if (lidar_result == SL_RESULT_OPERATION_TIMEOUT) continue;
 		mapper.update_scans(scan_curr);
 		std::cout << mapper.curr_pose << "\n";
+
+		// Publish pose to telemetry clients
+		telemetry.publishPose(mapper.curr_pose, k);
+
+		// Process telemetry commands
+		while (telemetry.hasCommand()) {
+			TelemetryCommand cmd = telemetry.popCommand();
+			if (cmd.type == CommandType::SET_GOAL) {
+				navigation_goal = Pose2D(cmd.x, cmd.y, 0.0);
+				navigation_paused = false;
+				std::cout << "Telemetry: New goal set to (" << cmd.x << ", " << cmd.y << ")\n";
+			} else if (cmd.type == CommandType::STOP) {
+				navigation_paused = true;
+				send_stop();
+				std::cout << "Telemetry: Navigation paused\n";
+			} else if (cmd.type == CommandType::RESUME) {
+				navigation_paused = false;
+				std::cout << "Telemetry: Navigation resumed\n";
+			} else if (cmd.type == CommandType::REQUEST_MAP) {
+				telemetry.publishMap(mapper.grid);
+				telemetry.publishPath(mapper.path);
+			}
+		}
 		for(int ii = 0; ii < n_samples; ii++){
 			scan_file << scan_curr(ii,0) << "," << scan_curr(ii,1) << "," << quality(ii) << ",";
 		}scan_file << "\n";
 		if (k % 10 == 0 && k > 5) {
 			send_stop();
 			mapper.slam();
-			mapper.plan_path(Pose2D(2.3,-0.5,0.0));
+			mapper.plan_path(navigation_goal);
 			if (!mapper.path.empty()) {
 				controller.setPath(mapper.path);
 			}
 
 			mapper.grid.writePGMFile("occupancy_grid_slam_" + std::to_string(k) + ".pgm");
 
+			// Publish map and path to telemetry clients
+			telemetry.publishMap(mapper.grid);
+			telemetry.publishPath(mapper.path);
 		}
 		end = std::chrono::high_resolution_clock::now();
 		duration = std::chrono::duration_cast<std::chrono::milliseconds>(end - start);
 		printf("initial NM Time elapsed: "); printf("%d",duration.count());printf(" milliseconds.\n");
 		start = std::chrono::high_resolution_clock::now();
-		if (k > 10) {
+		if (k > 10 && !navigation_paused) {
 			std::pair<int,int> velocities = controller.computeControl(mapper.curr_pose, scan_curr);
 			std::cout << "velocities:" << velocities.first << " " << velocities.second << "\n";
 			send_cmd(velocities.first,velocities.second);
@@ -368,6 +405,9 @@ int main(int argc, const char * argv[]) {
 	scan_file.close();
 
 	send_stop();
+
+	// Stop telemetry server
+	telemetry.stop();
 
 	lidarScanner.stopScanning();
 

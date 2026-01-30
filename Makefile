@@ -20,14 +20,14 @@
 EIGEN := -I$(CURDIR)/../eigen-3.4.0 
 C_INCLUDES += -I$(CURDIR)/../rplidar_sdk/sdk/include -I$(CURDIR)/../rplidar_sdk/sdk/src -I../old-mapnav-cpp/asio-1.36.0/include/ $(EIGEN) 
 
-EXTRA_OBJ := scan_match_11.o pose.o OccupancyGrid.o slam_posegraph.o mapper.o
+EXTRA_OBJ := scan_match_11.o pose.o OccupancyGrid.o slam_posegraph.o mapper.o TelemetryServer.o
 LD_LIBS += -lstdc++ -lpthread -lsl_lidar_sdk -lm
 LDFLAGS = -L../rplidar_sdk/output/Linux/Release/
 
-all: scan_match_11.o pose.o OccupancyGrid.o slam_posegraph.o lidar.exe lidar_react.exe
+all: scan_match_11.o pose.o OccupancyGrid.o slam_posegraph.o TelemetryServer.o lidar.exe lidar_react.exe
 
-lidar.exe : lidar.cpp $(EXTRA_OBJ) DDRCappController.o SerialWriter.o
-	g++ -std=c++11 $(C_INCLUDES) $(LDFLAGS) $< OccupancyGrid.cpp slam_posegraph.cpp pose.cpp scan_match_11.cpp mapper.cpp DDRCappController.cpp SerialWriter.cpp  $(LD_LIBS) -o $@
+lidar.exe : lidar.cpp $(EXTRA_OBJ) DDRCappController.o SerialWriter.o TelemetryServer.o
+	g++ -std=c++11 $(C_INCLUDES) $(LDFLAGS) $< OccupancyGrid.cpp slam_posegraph.cpp pose.cpp scan_match_11.cpp mapper.cpp DDRCappController.cpp SerialWriter.cpp TelemetryServer.cpp $(LD_LIBS) -o $@
 
 lidar_react.exe : lidar_react.cpp $(EXTRA_OBJ) DDRCappController.o SerialWriter.o
 	g++ -std=c++11 $(C_INCLUDES) $(LDFLAGS) $< OccupancyGrid.cpp slam_posegraph.cpp pose.cpp scan_match_11.cpp mapper.cpp DDRCappController.cpp SerialWriter.cpp  $(LD_LIBS) -o $@
@@ -58,3 +58,6 @@ slam_posegraph.o : slam_posegraph.cpp scan_match_11.o pose.o
 
 SerialWriter.o : SerialWriter.cpp
 	g++ -c --std=c++11 -I../old-mapnav-cpp/asio-1.36.0/include/ $< -o $@ -lpthread
+
+TelemetryServer.o : TelemetryServer.cpp
+	g++ -c --std=c++11 -I../old-mapnav-cpp/asio-1.36.0/include/ $(EIGEN) $< -o $@ -lpthread

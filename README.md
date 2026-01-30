@@ -30,9 +30,9 @@ where the last two options are the USB port and baud rate of a companion control
 
 The companion controller stops the wheels if a new velocity does not arrive within some pre-defined timeout period (~$150$-$250$ ms). 
 
-To run a purely reactive controller -- no scan match, no map, therefore no planned path to follow -- run 
+To run a purely reactive controller -- no scan match, no map, therefore no planned path to follow -- run
 ```
-./lidar.exe --channel --serial /dev/ttyUSB0 115200
+./lidar_react.exe --channel --serial /dev/ttyUSB0 115200
 ```
 
 ## Modifications 

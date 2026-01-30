@@ -125,6 +125,66 @@ std::vector<std::vector<double>> NDTScanMatcher::neldermead(
 }
 
 
+// Golden section search for optimal angle
+// More efficient than Nelder-Mead for 1D optimization: only 1 function eval per iteration
+double NDTScanMatcher::goldenSectionAngleSearch(
+	const Scan& scan1,
+	const NDTGrid& ndt_grid,
+	double grid_size,
+	double tx,
+	double ty,
+	double angle_min,
+	double angle_max,
+	double tol
+) {
+	// Golden ratio constants
+	const double invphi = 0.6180339887498949;   // 1/phi = (sqrt(5)-1)/2
+	const double invphi2 = 0.3819660112501051;  // 1/phi^2
+
+	// Pre-allocate transformed scan buffer
+	Scan transformed_scan(scan1.rows(), 2);
+
+	double a = angle_min;
+	double b = angle_max;
+	double h = b - a;
+
+	// Initial interior points
+	double c = a + invphi2 * h;
+	double d = a + invphi * h;
+
+	// Evaluate at initial interior points
+	transformScanInPlace(transformed_scan, scan1, tx, ty, c);
+	double fc = computeNDTScore(transformed_scan, ndt_grid, grid_size);
+
+	transformScanInPlace(transformed_scan, scan1, tx, ty, d);
+	double fd = computeNDTScore(transformed_scan, ndt_grid, grid_size);
+
+	// Iterate until convergence
+	while (h > tol) {
+		if (fc < fd) {
+			// Minimum is in [a, d]
+			b = d;
+			d = c;
+			fd = fc;
+			h = b - a;
+			c = a + invphi2 * h;
+			transformScanInPlace(transformed_scan, scan1, tx, ty, c);
+			fc = computeNDTScore(transformed_scan, ndt_grid, grid_size);
+		} else {
+			// Minimum is in [c, b]
+			a = c;
+			c = d;
+			fc = fd;
+			h = b - a;
+			d = a + invphi * h;
+			transformScanInPlace(transformed_scan, scan1, tx, ty, d);
+			fd = computeNDTScore(transformed_scan, ndt_grid, grid_size);
+		}
+	}
+
+	// Return midpoint of final bracket
+	return (a + b) * 0.5;
+}
 
 
 NDTGrid NDTScanMatcher::computeNDTGrid(const Scan& scan, double gridSize) {
@@ -293,48 +353,59 @@ void NDTScanMatcher::makePositiveDefinite(Matrix3d& A, bool& isPD, int maxAttemp
 	}
 }
 
-void NDTScanMatcher::ndtScanMatchHP(const Scan& scan2, const Scan& scan1, 
+void NDTScanMatcher::ndtScanMatchHP(const Scan& scan2, const Scan& scan1,
 				   double gridSize, Pose2D& result, Matrix3d& hessian,
-				   int maxIters = 60, double tol = 1e-6, 
-				   double txInit = 0.0, double tyInit = 0.0, 
+				   int maxIters = 60, double tol = 1e-6,
+				   double txInit = 0.0, double tyInit = 0.0,
 				   double phiInit = 0.0, bool debug = false) {
 	// std::cout << "Initial angle: "  << phiInit << "\n";
-	
+
 	// Compute NDT grid for the reference scan
 	NDTGrid ndtGrid = computeNDTGrid(scan2, gridSize);
-	
+
 	// Initialize parameters
 	double tx = txInit, ty = tyInit, phi = phiInit;
-	
-	
+
+
 	Matrix3d tempSquare = Matrix3d::Zero();
 	double prevScore2 = 0.0;
 	Matrix3d Amat = Matrix3d::Zero();
 	Vector3d bvec = Vector3d::Zero();
-	
+
+	// Pre-allocate matrices to avoid allocations in hot loop
+	int nPoints = scan1.rows();
+	Scan transformedScan(nPoints, 2);
+	Scan transformedScanTest(nPoints, 2);
+	MatrixXi gridIndices(nPoints, 2);
+	double invGridSize = 1.0 / gridSize;
+
 	for (int count = 0; count < maxIters; ++count) {
-		Scan transformedScan = transformScan(scan1, tx, ty, phi);
+		transformScanInPlace(transformedScan, scan1, tx, ty, phi);
 		double cphi = cos(phi);
 		double sphi = sin(phi);
 		Amat.setZero();
 		bvec.setZero();
-		
+
 		double score2 = 0.0;
-		
-		MatrixXi gridIndices = (transformedScan / gridSize).array().floor().cast<int>();
-		
-		for (int i = 0; i < transformedScan.rows(); ++i) {
+
+		// Compute grid indices in place
+		for (int i = 0; i < nPoints; ++i) {
+			gridIndices(i, 0) = static_cast<int>(floor(transformedScan(i, 0) * invGridSize));
+			gridIndices(i, 1) = static_cast<int>(floor(transformedScan(i, 1) * invGridSize));
+		}
+
+		for (int i = 0; i < nPoints; ++i) {
 			Vector2d point = transformedScan.row(i);
 			pair<int,int> cellKey = make_pair(gridIndices(i,0), gridIndices(i,1));
-			
+
 			NDTGrid::const_iterator it = ndtGrid.find(cellKey);
 			if (it != ndtGrid.end()) {
 				const GaussianCell& cell = it->second;
-				score2 += getNewtonData(Amat, bvec, phi,cphi,sphi, tempSquare, 
+				score2 += getNewtonData(Amat, bvec, phi,cphi,sphi, tempSquare,
 									  point, cell);
 			}
 		}
-		
+
 		// Make Hessian positive definite
 		Matrix3d AmatPD = Amat;
 		bool isPD;
@@ -367,26 +438,27 @@ void NDTScanMatcher::ndtScanMatchHP(const Scan& scan2, const Scan& scan1,
 		double b = 0.01;
 
 		double score3 = computeNDTScore(transformedScan, ndtGrid, gridSize);
-		Scan transformedScanTest = transformScan(scan1, tx - alpha*gradTx, 
-											   ty - alpha*gradTy, phi - alpha*gradPhi);
+		transformScanInPlace(transformedScanTest, scan1, tx - alpha*gradTx,
+							 ty - alpha*gradTy, phi - alpha*gradPhi);
 		double scoreNext = computeNDTScore(transformedScanTest, ndtGrid, gridSize);
-		
+
 		double lambda2 = bvec.transpose() * sol;
 		bool flag = scoreNext > score3 - b*alpha*lambda2;
-		
+
 		while (flag && alpha > 1e-8) {
 			alpha *= c;
-			transformedScanTest = transformScan(scan1, tx - alpha*gradTx, ty - alpha*gradTy, phi - alpha*gradPhi);
+			transformScanInPlace(transformedScanTest, scan1, tx - alpha*gradTx,
+								 ty - alpha*gradTy, phi - alpha*gradPhi);
 			scoreNext = computeNDTScore(transformedScanTest, ndtGrid, gridSize);
 			flag = scoreNext > score3 - b*alpha*lambda2;
 		}
 
-		
+
 		// Update parameters
 		tx -= gradTx * alpha;
 		ty -= gradTy * alpha;
 		phi -= gradPhi * alpha;
-		
+
 		// Check for convergence
 		if (abs(lambda2) < CONVERGENCE_TOL_LAMBDA) {
 			//if (debug) cout << "Convergence: lambda^2 = " << lambda2 << endl;
@@ -402,7 +474,7 @@ void NDTScanMatcher::ndtScanMatchHP(const Scan& scan2, const Scan& scan1,
 		}
 		prevScore2 = score2;
 	}
-	
+
 	result = Pose2D(tx, ty, phi);
 	hessian = Amat;
 }
