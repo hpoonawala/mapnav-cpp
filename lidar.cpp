@@ -184,18 +184,22 @@ class LidarScanner{
 			double dist;
 			double angle;
 			double last_angle = -999.0; // Initialize to impossible value
-			double angle_threshold = 1.0 * M_PI / 180.0; // 1 degree in radians
+			double angle_threshold = 0.5* M_PI / 180.0; // 1 degree in radians
 
 			if (SL_IS_OK(ans)) {
 				drv->ascendScanData(nodes, count);
 				for (int pos = 0; pos < (int)count ; ++pos) {
 					if ( ( (int)(nodes[pos].quality >> SL_LIDAR_RESP_MEASUREMENT_QUALITY_SHIFT) ) > 40){
 						angle = (nodes[pos].angle_z_q14 * 1.5708) / 16384.f;
-						dist = nodes[pos].dist_mm_q2/4000.0f;
-						scan_curr_loader(local_count,0) = angle;
-						scan_curr_loader(local_count,1) = dist;
-						quality(local_count) = (int) (nodes[pos].quality >> SL_LIDAR_RESP_MEASUREMENT_QUALITY_SHIFT);
-						local_count++;
+						if (last_angle < 0 || fabs(angle - last_angle) >= angle_threshold) {
+							dist = nodes[pos].dist_mm_q2/4000.0f;
+							scan_curr_loader(local_count,0) = angle;
+							scan_curr_loader(local_count,1) = dist;
+							quality(local_count) = (int) (nodes[pos].quality >> SL_LIDAR_RESP_MEASUREMENT_QUALITY_SHIFT);
+							last_angle = angle;
+							local_count++;
+						}
+
 					}
 					/* printf(" theta: %03.2f Dist: %08.2f \n", scan(pos,0),scan(pos,1)); */
 				}
@@ -349,6 +353,8 @@ int main(int argc, const char * argv[]) {
 		printf("Loop: %d / %d\n",k,loop_iters); 
 		telemetry.tick();
 		lidar_result = lidarScanner.capture(scan_curr,n_samples,quality); // fills scan_curr with polar version
+		cout << "n samples: " << n_samples << "\n";
+
 
 		if (lidar_result == SL_RESULT_OPERATION_TIMEOUT) continue;
 		mapper.update_scans(scan_curr);

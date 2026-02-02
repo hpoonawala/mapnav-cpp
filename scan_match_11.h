@@ -25,17 +25,32 @@ struct GaussianCell {
     Matrix2d covariance;
     Matrix2d covInv;
     double det;
-    GaussianCell(const Vector2d& m, const Matrix2d& cov) : mean(m), covariance(cov), covInv((Eigen::Matrix2d() << cov(1,1), -cov(0,1), -cov(0,1),  cov(0,0)).finished()*1/cov.determinant()), det(cov.determinant()) {}
+    double invdet;
+    GaussianCell() : mean(Vector2d::Zero()), covariance(Matrix2d::Zero()), covInv(Matrix2d::Zero()), det(1.0), invdet(1.0) {}
+    GaussianCell(const Vector2d& m, const Matrix2d& cov) : mean(m), covariance(cov), covInv((Eigen::Matrix2d() << cov(1,1), -cov(0,1), -cov(0,1),  cov(0,0)).finished()*1/cov.determinant()), det(cov.determinant()), invdet(1/cov.determinant()) {}
 
 };
 
-inline int64_t gridKey(int x, int y) {
-    return (static_cast<int64_t>(x) << 32) | static_cast<uint32_t>(y);
-}
-
 // Type definitions
 typedef MatrixXd Scan;  // Nx2 matrix where each row is (x,y)
-typedef std::unordered_map<int64_t, GaussianCell> NDTGrid;
+
+struct NDTGrid {
+    std::vector<GaussianCell> cells;
+    std::vector<char> valid;
+    int min_i, min_j;
+    int width, height;
+
+    NDTGrid() : min_i(0), min_j(0), width(0), height(0) {}
+
+    const GaussianCell* find(int i, int j) const {
+        int ci = i - min_i;
+        int cj = j - min_j;
+        if (ci < 0 || ci >= width || cj < 0 || cj >= height) return NULL;
+        int idx = ci * height + cj;
+        if (!valid[idx]) return NULL;
+        return &cells[idx];
+    }
+};
 
 
 class NDTScanMatcher {
