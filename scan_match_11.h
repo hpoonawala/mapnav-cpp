@@ -3,6 +3,7 @@
 #include <algorithm>
 #include <vector>
 #include <unordered_map>
+#include <cstdint>
 #include <Eigen/Dense>
 #include "pose.h"
 using namespace std;
@@ -28,15 +29,13 @@ struct GaussianCell {
 
 };
 
-struct PairHash {
-    std::size_t operator()(const std::pair<int,int>& p) const {
-        return std::hash<int>()(p.first) ^ (std::hash<int>()(p.second) << 1);
-    }
-};
+inline int64_t gridKey(int x, int y) {
+    return (static_cast<int64_t>(x) << 32) | static_cast<uint32_t>(y);
+}
 
 // Type definitions
 typedef MatrixXd Scan;  // Nx2 matrix where each row is (x,y)
-typedef std::unordered_map<std::pair<int,int>, GaussianCell, PairHash> NDTGrid;
+typedef std::unordered_map<int64_t, GaussianCell> NDTGrid;
 
 
 class NDTScanMatcher {
@@ -46,6 +45,7 @@ private:
     static const double D1;
     static const double D2;
     static const double D3;
+    static const double NEG_HALF_D2;
     static const double MAX_GRADIENT_NORM;
     static const double CONVERGENCE_TOL_LAMBDA;
     static const double CONVERGENCE_TOL_GRAD;
@@ -68,7 +68,7 @@ public:
     
     Scan transformScan(const Scan&, double, double, double);    
     Scan transformScanToPose(const Scan&, const Pose2D&);     
-    double computeNDTScore(const Scan&, const NDTGrid&, double);    
+    double computeNDTScore(const Scan&, const NDTGrid&, double invGridSize, MatrixXi& gridIndices);    
 private:
     double getNewtonData(Matrix3d&, Vector3d&, double,double, double,
 		    Matrix3d&, const Vector2d&,

@@ -49,10 +49,12 @@ std::vector<std::vector<double>> NDTScanMatcher::neldermead(
 	
 	// Define objective function (C++11 compatible)
 	Scan transformed_scan(scan1.rows(), 2);
+	MatrixXi gridIndicesBuf(scan1.rows(), 2);
+	double invGridSize = 1.0 / grid_size;
 
 	std::function<double(double)> fn = [&](double x) -> double {
 		transformScanInPlace(transformed_scan,scan1, initial_dx, initial_dy, x);
-		return computeNDTScore(transformed_scan, ndt_grid, grid_size);
+		return computeNDTScore(transformed_scan, ndt_grid, invGridSize, gridIndicesBuf);
 	};
 	
 	double fc = 0.0;
@@ -143,6 +145,8 @@ double NDTScanMatcher::goldenSectionAngleSearch(
 
 	// Pre-allocate transformed scan buffer
 	Scan transformed_scan(scan1.rows(), 2);
+	MatrixXi gridIndicesBuf(scan1.rows(), 2);
+	double invGridSize = 1.0 / grid_size;
 
 	double a = angle_min;
 	double b = angle_max;
@@ -154,10 +158,10 @@ double NDTScanMatcher::goldenSectionAngleSearch(
 
 	// Evaluate at initial interior points
 	transformScanInPlace(transformed_scan, scan1, tx, ty, c);
-	double fc = computeNDTScore(transformed_scan, ndt_grid, grid_size);
+	double fc = computeNDTScore(transformed_scan, ndt_grid, invGridSize, gridIndicesBuf);
 
 	transformScanInPlace(transformed_scan, scan1, tx, ty, d);
-	double fd = computeNDTScore(transformed_scan, ndt_grid, grid_size);
+	double fd = computeNDTScore(transformed_scan, ndt_grid, invGridSize, gridIndicesBuf);
 
 	// Iterate until convergence
 	while (h > tol) {
@@ -169,7 +173,7 @@ double NDTScanMatcher::goldenSectionAngleSearch(
 			h = b - a;
 			c = a + invphi2 * h;
 			transformScanInPlace(transformed_scan, scan1, tx, ty, c);
-			fc = computeNDTScore(transformed_scan, ndt_grid, grid_size);
+			fc = computeNDTScore(transformed_scan, ndt_grid, invGridSize, gridIndicesBuf);
 		} else {
 			// Minimum is in [c, b]
 			a = c;
@@ -178,7 +182,7 @@ double NDTScanMatcher::goldenSectionAngleSearch(
 			h = b - a;
 			d = a + invphi * h;
 			transformScanInPlace(transformed_scan, scan1, tx, ty, d);
-			fd = computeNDTScore(transformed_scan, ndt_grid, grid_size);
+			fd = computeNDTScore(transformed_scan, ndt_grid, invGridSize, gridIndicesBuf);
 		}
 	}
 
@@ -189,41 +193,47 @@ double NDTScanMatcher::goldenSectionAngleSearch(
 
 NDTGrid NDTScanMatcher::computeNDTGrid(const Scan& scan, double gridSize) {
 	NDTGrid ndtGrid;
-	
+	double invGridSize = 1.0 / gridSize;
+
 	// Compute grid indices for each point
-	MatrixXi gridIndices = (scan / gridSize).array().floor().cast<int>();
-	
+	int nPoints = scan.rows();
+	MatrixXi gridIndices(nPoints, 2);
+	for (int i = 0; i < nPoints; ++i) {
+		gridIndices(i, 0) = static_cast<int>(floor(scan(i, 0) * invGridSize));
+		gridIndices(i, 1) = static_cast<int>(floor(scan(i, 1) * invGridSize));
+	}
+
 	// Group points by grid cell
-	unordered_map<pair<int,int>, vector<int>, PairHash> cellPoints;
-	
-	for (int i = 0; i < gridIndices.rows(); ++i) {
-		pair<int,int> cellKey = make_pair(gridIndices(i,0), gridIndices(i,1));
+	unordered_map<int64_t, vector<int>> cellPoints;
+
+	for (int i = 0; i < nPoints; ++i) {
+		int64_t cellKey = gridKey(gridIndices(i,0), gridIndices(i,1));
 		cellPoints[cellKey].push_back(i);
 	}
-	
+
 	// Compute Gaussian distributions for each cell
-	for (unordered_map<pair<int,int>, vector<int>, PairHash>::const_iterator it = cellPoints.begin(); 
+	for (unordered_map<int64_t, vector<int>>::const_iterator it = cellPoints.begin();
 		 it != cellPoints.end(); ++it) {
-		const pair<int,int>& cellKey = it->first;
+		int64_t cellKey = it->first;
 		const vector<int>& pointIndices = it->second;
-		
+
 		if (pointIndices.size() > 2) {  // At least 3 points to compute covariance
 			MatrixXd cellPointsMat(pointIndices.size(), 2);
 			for (size_t i = 0; i < pointIndices.size(); ++i) {
 				cellPointsMat.row(i) = scan.row(pointIndices[i]);
 			}
-			
+
 			Vector2d mean = cellPointsMat.colwise().mean();
 			MatrixXd centered = cellPointsMat.rowwise() - mean.transpose();
 			Matrix2d covariance = (centered.transpose() * centered) / (pointIndices.size() - 1);
-			
+
 			// Regularize covariance to avoid singular matrices
 			covariance += Matrix2d::Identity() * ID2_REG;
-			
+
 			ndtGrid.insert(make_pair(cellKey, GaussianCell(mean, covariance)));
 		}
 	}
-	
+
 	return ndtGrid;
 }
 
@@ -244,32 +254,41 @@ Scan NDTScanMatcher::transformScanToPose(const Scan& scan, const Pose2D& pose) {
 	return transformScan(scan, pose.x_, pose.y_, pose.theta_);
 }
 
-double NDTScanMatcher::computeNDTScore(const Scan& scan, const NDTGrid& ndtGrid, double gridSize) {
-	MatrixXi gridIndices = (scan / gridSize).array().floor().cast<int>();
-	
+double NDTScanMatcher::computeNDTScore(const Scan& scan, const NDTGrid& ndtGrid,
+                                       double invGridSize, MatrixXi& gridIndices) {
+	auto start = std::chrono::high_resolution_clock::now();
 	int nPoints = scan.rows();
-	//VectorXd scores = VectorXd::Constant(nPoints, D3);  // Default score for missing cells
-	double totalScore = scan.rows() * D3;
-	
+
+	// Compute grid indices in place
+	for (int i = 0; i < nPoints; ++i) {
+		gridIndices(i, 0) = static_cast<int>(floor(scan(i, 0) * invGridSize));
+		gridIndices(i, 1) = static_cast<int>(floor(scan(i, 1) * invGridSize));
+	}
+
+	double totalScore = nPoints * D3;
+
 	// Find valid cells
 	for (int i = 0; i < nPoints; ++i) {
-		pair<int,int> cellKey = make_pair(gridIndices(i,0), gridIndices(i,1));
+		int64_t cellKey = gridKey(gridIndices(i,0), gridIndices(i,1));
 		NDTGrid::const_iterator it = ndtGrid.find(cellKey);
-		
+
 		if (it != ndtGrid.end()) {
 			const GaussianCell& cell = it->second;
 			Vector2d point = scan.row(i);
 			Vector2d v = point - cell.mean;
-			
+
 			// Compute Mahalanobis distance efficiently
-			double d = (v(0)*v(0)*cell.covariance(1,1) + 
-					   v(1)*v(1)*cell.covariance(0,0) - 
+			double d = (v(0)*v(0)*cell.covariance(1,1) +
+					   v(1)*v(1)*cell.covariance(0,0) -
 					   2*cell.covariance(0,1)*v(0)*v(1)) / cell.det;
-			
-			totalScore -= D1 * exp(-0.5 * D2 * d);
+
+			totalScore -= D1 * exp(NEG_HALF_D2 * d);
 		}
 	}
-	
+
+	auto end = std::chrono::high_resolution_clock::now();
+	auto duration = std::chrono::duration_cast<std::chrono::milliseconds>(end - start);
+	printf("ScoreTime: "); printf("%d",duration.count());printf(" ms\n");
 	return totalScore;
 }
 
@@ -288,8 +307,8 @@ double NDTScanMatcher::getNewtonData(Matrix3d& Amat,
 			   v(1)*v(1)*cell.covariance(0,0) - 
 			   2*cell.covariance(0,1)*v(0)*v(1)) / cell.det;
 	
-	double e = -D1 * D2 / 2 * exp(-0.5 * d * D2);
-	double score = D3 - D1 * exp(-0.5 * D2 * d);
+	double e = -D1 * D2 / 2 * exp(NEG_HALF_D2 * d);
+	double score = D3 - D1 * exp(NEG_HALF_D2 * d);
 	
 	// Matrix<double, 2, 3> Jp;
 	// Jp << 1, 0, -point(0)*sphi - point(1)*cphi,
@@ -396,7 +415,7 @@ void NDTScanMatcher::ndtScanMatchHP(const Scan& scan2, const Scan& scan1,
 
 		for (int i = 0; i < nPoints; ++i) {
 			Vector2d point = transformedScan.row(i);
-			pair<int,int> cellKey = make_pair(gridIndices(i,0), gridIndices(i,1));
+			int64_t cellKey = gridKey(gridIndices(i,0), gridIndices(i,1));
 
 			NDTGrid::const_iterator it = ndtGrid.find(cellKey);
 			if (it != ndtGrid.end()) {
@@ -437,10 +456,10 @@ void NDTScanMatcher::ndtScanMatchHP(const Scan& scan2, const Scan& scan1,
 		double c = 0.5;
 		double b = 0.01;
 
-		double score3 = computeNDTScore(transformedScan, ndtGrid, gridSize);
+		double score3 = computeNDTScore(transformedScan, ndtGrid, invGridSize, gridIndices);
 		transformScanInPlace(transformedScanTest, scan1, tx - alpha*gradTx,
 							 ty - alpha*gradTy, phi - alpha*gradPhi);
-		double scoreNext = computeNDTScore(transformedScanTest, ndtGrid, gridSize);
+		double scoreNext = computeNDTScore(transformedScanTest, ndtGrid, invGridSize, gridIndices);
 
 		double lambda2 = bvec.transpose() * sol;
 		bool flag = scoreNext > score3 - b*alpha*lambda2;
@@ -449,7 +468,7 @@ void NDTScanMatcher::ndtScanMatchHP(const Scan& scan2, const Scan& scan1,
 			alpha *= c;
 			transformScanInPlace(transformedScanTest, scan1, tx - alpha*gradTx,
 								 ty - alpha*gradTy, phi - alpha*gradPhi);
-			scoreNext = computeNDTScore(transformedScanTest, ndtGrid, gridSize);
+			scoreNext = computeNDTScore(transformedScanTest, ndtGrid, invGridSize, gridIndices);
 			flag = scoreNext > score3 - b*alpha*lambda2;
 		}
 
@@ -484,6 +503,7 @@ const double NDTScanMatcher::ID2_REG = 1e-6;
 const double NDTScanMatcher::D1 = 1.4663370687934272;
 const double NDTScanMatcher::D2 = 0.5643202489410892;
 const double NDTScanMatcher::D3 = 1.2039728043259361;
+const double NDTScanMatcher::NEG_HALF_D2 = -0.5 * 0.5643202489410892;
 const double NDTScanMatcher::MAX_GRADIENT_NORM = 0.2;
 const double NDTScanMatcher::CONVERGENCE_TOL_LAMBDA = 0.01;
 const double NDTScanMatcher::CONVERGENCE_TOL_GRAD = 1e-6;
