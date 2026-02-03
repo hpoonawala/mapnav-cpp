@@ -184,7 +184,7 @@ class LidarScanner{
 			double dist;
 			double angle;
 			double last_angle = -999.0; // Initialize to impossible value
-			double angle_threshold = 0.5* M_PI / 180.0; // 1 degree in radians
+			double angle_threshold = 0.33* M_PI / 180.0; // 1 degree in radians
 
 			if (SL_IS_OK(ans)) {
 				drv->ascendScanData(nodes, count);
@@ -351,7 +351,6 @@ int main(int argc, const char * argv[]) {
 	auto duration = std::chrono::duration_cast<std::chrono::milliseconds>(end - start);
 	for(int k=0;k<loop_iters;k++){
 		printf("Loop: %d / %d\n",k,loop_iters); 
-		telemetry.tick();
 		lidar_result = lidarScanner.capture(scan_curr,n_samples,quality); // fills scan_curr with polar version
 		cout << "n samples: " << n_samples << "\n";
 
@@ -361,7 +360,10 @@ int main(int argc, const char * argv[]) {
 		std::cout << mapper.curr_pose << "\n";
 
 		// Publish pose to telemetry clients
+		if (k % 5 ==0) {
 		telemetry.publishPose(mapper.curr_pose, k);
+		}
+		telemetry.tick();
 
 		// Process telemetry commands
 		while (telemetry.hasCommand()) {
@@ -400,7 +402,7 @@ int main(int argc, const char * argv[]) {
 
 			// Publish map and path to telemetry clients
 			//telemetry.publishMap(mapper.grid);
-			telemetry.tick();
+			//telemetry.tick();
 			telemetry.publishPath(mapper.path);
 		}
 		end = std::chrono::high_resolution_clock::now();

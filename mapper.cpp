@@ -10,6 +10,7 @@
 #include "slam_posegraph.h"
 #include "mapper.h"
 #include <chrono>
+#include <stdio.h>
 
 
 Mapper::Mapper() :	matcher {}, 
@@ -21,11 +22,15 @@ Mapper::Mapper() :	matcher {},
 					{};
 
 Scan polarToCartesian(Scan& scan,int n_samples) {
+		auto start = std::chrono::high_resolution_clock::now();
 	Scan cart_scan= Scan(n_samples,2);
 	for (int i = 0; i < n_samples ; i++){
 		cart_scan(i,0) = scan(i,1)*cos(scan(i,0));
 		cart_scan(i,1) = -scan(i,1)*sin(scan(i,0));
 	}
+		auto end = std::chrono::high_resolution_clock::now();
+		auto duration = std::chrono::duration_cast<std::chrono::milliseconds>(end - start);
+		printf("polar2cart: "); printf("%d",duration.count());printf(" milliseconds.\n");
 	return cart_scan;
 }
 
@@ -38,11 +43,20 @@ void Mapper::update_scans(Scan& scan_polar) {
 		worldScans.push_back(scan);
 		world_poses.push_back(Pose  (curr_pose.x_, curr_pose.y_,curr_pose.theta_));
 	} else { // match, update pose, then save
+		auto start = std::chrono::high_resolution_clock::now();
+
 		matcher.ndtScanMatchHP(localScans[nscans-1], scan,gridsize, result, hessian,60,  1e-6, 0.0,  0.0, 0.0, false);
+		auto end = std::chrono::high_resolution_clock::now();
+		auto duration = std::chrono::duration_cast<std::chrono::milliseconds>(end - start);
+		printf("internal NM Time elapsed: "); printf("%d",duration.count());printf(" milliseconds.\n");
+		start = std::chrono::high_resolution_clock::now();
 		move_pose_local(curr_pose,result); // update current pose
 		world_poses.push_back(Pose  (curr_pose.x_, curr_pose.y_,curr_pose.theta_));
 		localScans.push_back(scan);
 		worldScans.push_back( matcher.transformScanToPose(scan,curr_pose));
+		end = std::chrono::high_resolution_clock::now();
+		duration = std::chrono::duration_cast<std::chrono::milliseconds>(end - start);
+		printf("pushdata NM Time elapsed: "); printf("%d",duration.count());printf(" milliseconds.\n");
 		// update the grid
 	}
 	nscans++;

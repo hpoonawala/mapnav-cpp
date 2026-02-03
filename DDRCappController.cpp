@@ -53,9 +53,10 @@ void DDRCappController::reset() {
 }
 
 std::pair<double, double>* DDRCappController::findLookaheadPoint(const Pose2D& robot_pose) {
-    double x = robot_pose.x_;
-    double y = robot_pose.y_;
-    
+	if (path.empty()) return nullptr;
+	double x = robot_pose.x_;
+	double y = robot_pose.y_;
+
     while (current_index < path.size()) {
         double px = path[current_index].first;
         double py = path[current_index].second;
@@ -67,7 +68,7 @@ std::pair<double, double>* DDRCappController::findLookaheadPoint(const Pose2D& r
         current_index++;
     }
     
-    return nullptr;
+    return &path[path.size()-1];
 }
 
 double DDRCappController::computeAngle(const Pose2D& robot_pose) {
