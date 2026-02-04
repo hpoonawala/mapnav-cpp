@@ -42,3 +42,9 @@ There is a lot of technical debt in this code.
 One easy modification is to enable use of a Nelder-Mead optimization to search for the angular offset before scan-matching. This optimization took $100$ ms on the RPi4, but it improved the scan matching results significantly, especially under higher angular velocities demanded by collision avoidance. 
 
 
+```
+raspip=xxx.xxx
+python3 telemetry_client.py --host 10.45.$raspip
+scp pi@10.45.$raspip:~/src/mapnav-cpp/occupancy_grid_slam.pgm slam.pgm
+scp pi@10.45.$raspip:~/src/mapnav-cpp/occupancy_grid_slam_final.pgm final_slam.pgm
+```

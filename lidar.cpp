@@ -370,8 +370,8 @@ int main(int argc, const char * argv[]) {
 			TelemetryCommand cmd = telemetry.popCommand();
 			if (cmd.type == CommandType::SET_GOAL) {
 				navigation_goal = Pose2D(cmd.x, cmd.y, 0.0);
-				mapper.plan_path(navigation_goal);
-				telemetry.publishPath(mapper.path);
+				//mapper.plan_path(navigation_goal);
+				//telemetry.publishPath(mapper.path);
 				navigation_paused = false;
 				std::cout << "Telemetry: New goal set to (" << cmd.x << ", " << cmd.y << ")\n";
 			} else if (cmd.type == CommandType::STOP) {
@@ -383,7 +383,7 @@ int main(int argc, const char * argv[]) {
 				std::cout << "Telemetry: Navigation resumed\n";
 			} else if (cmd.type == CommandType::REQUEST_MAP) {
 				telemetry.publishMap(mapper.grid);
-				telemetry.publishPath(mapper.path);
+				//telemetry.publishPath(mapper.path);
 				telemetry.tick();
 			}
 		}
@@ -393,17 +393,17 @@ int main(int argc, const char * argv[]) {
 		if (k % 10 == 0 && k > 5) {
 			send_stop();
 			mapper.slam();
-			mapper.plan_path(navigation_goal);
-			if (!mapper.path.empty()) {
-				controller.setPath(mapper.path);
-			}
+			//mapper.plan_path(navigation_goal);
+			//if (!mapper.path.empty()) {
+			//	controller.setPath(mapper.path);
+			//}
 
-			mapper.grid.writePGMFile("occupancy_grid_slam_" + std::to_string(k) + ".pgm");
+			//mapper.grid.writePGMFile("occupancy_grid_slam_" + std::to_string(k) + ".pgm");
 
 			// Publish map and path to telemetry clients
-			//telemetry.publishMap(mapper.grid);
-			//telemetry.tick();
-			telemetry.publishPath(mapper.path);
+			telemetry.publishMap(mapper.grid);
+			telemetry.tick();
+			//telemetry.publishPath(mapper.path);
 		}
 		end = std::chrono::high_resolution_clock::now();
 		duration = std::chrono::duration_cast<std::chrono::milliseconds>(end - start);
