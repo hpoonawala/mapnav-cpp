@@ -16,28 +16,53 @@
 # * along with this program.  If not, see <http://www.gnu.org/licenses/>.
 # *
 # */
-#
+
+# Set flags assuming on Raspberry PI, then modify for MAC
 CXXFLAGS = -std=c++11 -O2
 EIGEN := -I$(CURDIR)/../eigen-3.4.0
-C_INCLUDES += -I$(CURDIR)/../rplidar_sdk/sdk/include -I$(CURDIR)/../rplidar_sdk/sdk/src -I../old-mapnav-cpp/asio-1.36.0/include/ $(EIGEN)
-
-EXTRA_OBJ := scan_match_11.o pose.o OccupancyGrid.o slam_posegraph.o mapper.o TelemetryServer.o
-LD_LIBS += -lstdc++ -lpthread -lsl_lidar_sdk -lm
+ASIO := -I../old-mapnav-cpp/asio-1.36.0/include/
+RPLIDAR := -I$(CURDIR)/../rplidar_sdk/sdk/
 LDFLAGS = -L../rplidar_sdk/output/Linux/Release/
+C_INCLUDES += $(RPLIDAR)include $(RPLIDAR)src $(ASIO) $(EIGEN)
+
+# Extra Obj may need to be customized, could be wasting compile time here
+EXTRA_OBJ := scan_match_11.o pose.o OccupancyGrid.o slam_posegraph.o mapper.o TelemetryServer.o lidarScanner.o 
+LD_LIBS += -lstdc++ -lpthread -lsl_lidar_sdk -lm
+
+# If on MAC, point to appropiate folders, and modify LDLFLAG
+ifeq ($(OS),Windows_NT)
+else 
+	UNAME_S := $(shell uname -s)
+	ifeq ($(UNAME_S),Darwin)
+		## When Compiling on HP macbook
+		EIGEN := -I$(CURDIR)/../../eigen-3.4.0 
+		ASIO = -I../mapnav-cpp-mujoco/asio-1.36.0/include/
+		LDFLAGS:= -L../rplidar_sdk/output/Darwin/Release/
+	endif
+endif
 
 all: scan_match_11.o pose.o OccupancyGrid.o slam_posegraph.o TelemetryServer.o lidar.exe lidar_react.exe
 
-lidar.exe : lidar.cpp $(EXTRA_OBJ) DDRCappController.o SerialWriter.o TelemetryServer.o
-	g++ $(CXXFLAGS) $(C_INCLUDES) $(LDFLAGS) $< OccupancyGrid.cpp slam_posegraph.cpp pose.cpp scan_match_11.cpp mapper.cpp DDRCappController.cpp SerialWriter.cpp TelemetryServer.cpp $(LD_LIBS) -o $@
+.PHONY: lidar
+lidar: lidar.exe
 
+# Original working main file for LiDAR navigation with mappoing
+lidar.exe : lidar.cpp $(EXTRA_OBJ) DDRCappController.o SerialWriter.o TelemetryServer.o lidarScanner.o
+	g++ $(CXXFLAGS) $(C_INCLUDES) $(LDFLAGS) $< lidarScanner.cpp OccupancyGrid.cpp slam_posegraph.cpp pose.cpp scan_match_11.cpp mapper.cpp DDRCappController.cpp SerialWriter.cpp TelemetryServer.cpp $(LD_LIBS) -o $@
+
+# Reactive control only, with joystick modes
 lidar_react.exe : lidar_react.cpp $(EXTRA_OBJ) DDRCappController.o SerialWriter.o
 	g++ $(CXXFLAGS) $(C_INCLUDES) $(LDFLAGS) $< OccupancyGrid.cpp slam_posegraph.cpp pose.cpp scan_match_11.cpp mapper.cpp DDRCappController.cpp SerialWriter.cpp  $(LD_LIBS) -o $@
 
+# Early attempts at getting LiDAR
 main.exe : main.cpp $(EXTRA_OBJ)
 	g++ $(CXXFLAGS) $(C_INCLUDES) $(LDFLAGS) $< OccupancyGrid.cpp slam_posegraph.cpp pose.cpp scan_match_11.cpp $(LD_LIBS) -o $@
 
 main_load.exe : main_load.cpp $(EXTRA_OBJ) mapper.o
 	g++ $(CXXFLAGS) $(C_INCLUDES) $(LDFLAGS) $< OccupancyGrid.cpp slam_posegraph.cpp pose.cpp scan_match_11.cpp mapper.cpp $(LD_LIBS) -o $@
+
+lidarScanner.o : lidarScanner.cpp
+	g++ $(CXXFLAGS) -c $(C_INCLUDES) $(LDFLAGS) $< $(LD_LIBS) -o $@
 
 scan_match_11.o : scan_match_11.cpp
 	g++ $(CXXFLAGS) -c $(EIGEN) $< -o $@

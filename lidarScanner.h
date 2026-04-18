@@ -1,68 +1,32 @@
-// TODO: upgrade lidar.cpp using this template to improve `lidarScanner`
-#ifndef LIDAR_SCANNER_H
-#define LIDAR_SCANNER_H
+#ifndef LIDAR_H
+#define LIDAR_H 
 
-#include "sl_lidar.h"
-#include "sl_lidar_driver.h"
 #include <Eigen/Dense>
-#include <string>
-
+#include <fstream>
+#include <iostream>
+#include <sstream>
+#include <vector>
+#include <unistd.h>
 using namespace sl;
+using namespace std;
 using namespace Eigen;
+typedef MatrixXd Scan;  // Nx2 matrix where each row is (x,y)
+class LidarScanner{
+	private:
+		IChannel* _channel;
+		Scan scan_curr_loader;  // 100 points
+		ILidarDriver *drv;
+		// Disable copy constructor and assignment
+		LidarScanner(const LidarScanner&) = delete;
+		LidarScanner& operator=(const LidarScanner&) = delete;
+	public:
+		LidarScanner(const char*, sl_u32);
+		~LidarScanner();
+		void startScanning();
+		void stopScanning();
+		sl_result capture(Scan&, int&, VectorXi&);
+		bool initialize();
 
-enum class LidarStatus {
-    OK,
-    WARNING,
-    ERROR,
-    NOT_INITIALIZED
 };
+#endif
 
-struct ScanData {
-    MatrixXd points;        // Nx2 matrix of (x,y) points
-    VectorXi quality;       // Quality values for each point
-    int n_samples;          // Number of valid samples
-    double timestamp;       // Capture timestamp
-};
-
-class LidarScanner {
-public:
-    // Constructor/Destructor
-    LidarScanner();
-    ~LidarScanner();
-
-    // Initialization
-    bool initializeSerial(const char* port, sl_u32 baudrate);
-    bool initializeUdp(const char* ipaddr, sl_u32 port);
-    
-    // Core functionality
-    bool startScanning();
-    bool stopScanning();
-    bool getNextScan(ScanData& scan_data);
-    
-    // Status and health
-    LidarStatus getStatus() const;
-    bool isHealthy() const;
-    void getDeviceInfo(std::string& info) const;
-    
-private:
-    // Disable copy constructor and assignment
-    LidarScanner(const LidarScanner&) = delete;
-    LidarScanner& operator=(const LidarScanner&) = delete;
-    
-    // Internal helper methods
-    bool connect(IChannel* channel);
-    bool checkHealth();
-    bool captureRawScan(sl_lidar_response_measurement_node_hq_t* nodes, size_t& count);
-    void processRawScan(sl_lidar_response_measurement_node_hq_t* nodes, size_t count, ScanData& scan_data);
-    void cleanup();
-    
-    // Member variables
-    ILidarDriver* drv_;
-    IChannel* channel_;
-    bool initialized_;
-    bool scanning_;
-    LidarStatus status_;
-    int quality_threshold_;
-};
-
-#endif // LIDAR_SCANNER_H
