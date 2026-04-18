@@ -105,12 +105,6 @@ int send_stop(){
 	return 0;
 }
 
-// watchdog timer code
-// Shared state
-std::atomic<bool> running(true);
-std::atomic<long long> last_command_time_ms(0);
-std::atomic<bool> is_stopped(true);  // Track if robot is already stopped
-
 // Helper to get current time in milliseconds
 long long get_time_ms() {
     struct timespec ts;
@@ -118,28 +112,72 @@ long long get_time_ms() {
     return ts.tv_sec * 1000LL + ts.tv_nsec / 1000000LL;
 }
 
-// Watchdog thread function
-void* watchdog_thread(void* arg) {
-    const int TIMEOUT_MS = 250;
-    
-    while (running) {
-        long long now = get_time_ms();
-        long long last_cmd = last_command_time_ms.load();
-        
-	if (last_cmd > 0 && (now - last_cmd) > TIMEOUT_MS) {
-		// Too long since last command - send stop
-		if (!is_stopped.load()) {
-			//send_stop();
-			//delay(1);
-			is_stopped.store(true);
-			printf("Watchdog: Stopping robot (timeout)\n");
-		}
-	}
 
-        usleep(10000); // Check every 10ms
+
+
+// RAII watchdog thread wrapper
+struct WatchdogThread {
+    WatchdogThread() : running_(true), last_command_time_ms_(0), is_stopped_(true) {
+        pthread_create(&thread_, nullptr, thread_func, this);
     }
-    return nullptr;
-}
+    ~WatchdogThread() {
+        running_ = false;
+        pthread_join(thread_, nullptr);
+    }
+    WatchdogThread(const WatchdogThread&) = delete;
+    WatchdogThread& operator=(const WatchdogThread&) = delete;
+
+    void ping() {
+        last_command_time_ms_.store(get_time_ms());
+        is_stopped_.store(false);
+    }
+    void set_stopped() {
+        is_stopped_.store(true);
+    }
+
+private:
+    static void* thread_func(void* arg) {
+        static_cast<WatchdogThread*>(arg)->run();
+        return nullptr;
+    }
+    void run() {
+        const int TIMEOUT_MS = 250;
+        while (running_) {
+            long long now = get_time_ms();
+            long long last_cmd = last_command_time_ms_.load();
+            if (last_cmd > 0 && (now - last_cmd) > TIMEOUT_MS) {
+                if (!is_stopped_.load()) {
+                    //send_stop();
+                    is_stopped_.store(true);
+                    printf("Watchdog: Stopping robot (timeout)\n");
+                }
+            }
+            usleep(10000);
+        }
+    }
+
+    pthread_t thread_;
+    std::atomic<bool> running_;
+    std::atomic<long long> last_command_time_ms_;
+    std::atomic<bool> is_stopped_;
+};
+
+
+// Use std::thread, not pthread:
+/*
+struct WatchdogThread {
+      WatchdogThread() : running_(true), last_command_time_ms_(0), is_stopped_(true),
+                         thread_(&WatchdogThread::run, this) {}
+      ~WatchdogThread() {
+          running_ = false;
+          thread_.join();
+      }
+      // ... rest unchanged
+  private:
+      std::thread thread_;  // replaces pthread_t
+      // ... atomics unchanged
+  };
+*/
 
 // Controller command for velocities 
 int send_cmd(int v, int w){
@@ -371,9 +409,7 @@ int main(int argc, const char * argv[]) {
 	sl_result lidar_result;
 	Mapper mapper;
 	DDRCappController controller({}, 0.5, 150.0, 200.0);
-	// start watchdog timer thread 
-	pthread_t watchdog;
-	pthread_create(&watchdog, nullptr, watchdog_thread, nullptr);
+	WatchdogThread watchdog;
 	auto start = std::chrono::high_resolution_clock::now();
 	auto end = std::chrono::high_resolution_clock::now();
 	auto duration = std::chrono::duration_cast<std::chrono::milliseconds>(end - start);
@@ -388,7 +424,7 @@ int main(int argc, const char * argv[]) {
 		}scan_file << "\n";
 		if (k % 10 == 0 && k > 5) {
 			send_stop();
-			is_stopped.store(true);
+			watchdog.set_stopped();
 			mapper.slam();
 			mapper.plan_path(Pose2D(2.3,-0.5,0.0));
 			if (!mapper.path.empty()) {
@@ -406,15 +442,10 @@ int main(int argc, const char * argv[]) {
 			std::pair<int,int> velocities = controller.computeControl(mapper.curr_pose, scan_curr);
 			std::cout << "velocities:" << velocities.first << " " << velocities.second << "\n";
 			send_cmd(velocities.first,velocities.second);
-			//Shut-off mechanism with watchdog timer thread
-			//last_command_time_ms.store(get_time_ms());
-			//is_stopped.store(false);
-			// Without watchdog timer thread:
-			//delay(200);
-			//send_stop();
+			watchdog.ping();
 		} else {
 			send_stop();
-			is_stopped.store(true);
+			watchdog.set_stopped();
 		}
 	}
 	scan_file.close();
@@ -422,8 +453,7 @@ int main(int argc, const char * argv[]) {
 	send_stop();
 
 	lidarScanner.stopScanning();
-	running = false;
-	pthread_join(watchdog, nullptr);
+	// watchdog destructor fires here, setting running_=false and joining the thread
 
 	// Run slam 
 	mapper.slam();
