@@ -70,6 +70,7 @@ static inline void delay(sl_word_size_t ms){
 #include "slam_posegraph.h"
 #include "mapper.h"
 #include "DDRCappController.h"
+#include "lidarScanner.h"
 
 // Serial includes
 #include "SerialWriter.h"
@@ -85,11 +86,6 @@ static inline void delay(sl_word_size_t ms){
 using namespace sl;
 using namespace std;
 using namespace Eigen;
-
-typedef MatrixXd Scan;  // Nx2 matrix where each row is (x,y)
-
-// Begin definitions 
-
 
 // Controller command for stopping
 int send_stop(){
@@ -138,158 +134,6 @@ int send_cmd(int v, int w){
 	}
 	return 0;
 }
-
-// LiDAR Scanner class 
-class LidarScanner{
-	private:
-		IChannel* _channel;
-		Scan scan_curr_loader;  // 100 points
-		ILidarDriver *drv;
-		// Disable copy constructor and assignment
-		LidarScanner(const LidarScanner&) = delete;
-		LidarScanner& operator=(const LidarScanner&) = delete;
-	public:
-		// Constructor 
-		LidarScanner(const char *opt_channel_param_first, sl_u32 opt_channel_param_second) : drv {*createLidarDriver()}, _channel {(*createSerialPortChannel(opt_channel_param_first, opt_channel_param_second))}, scan_curr_loader {Scan(8152,2)}  {};
-		// Destructor
-		~LidarScanner() { 
-			delay(20);
-			drv->setMotorSpeed(0);
-			delete drv;
-			drv = NULL;
-		}
-
-		void startScanning(){
-			if (SL_IS_FAIL(drv->startScan( 0,1 ))) // you can force slamtec lidar to perform scan operation regardless whether the motor is rotating
-			{
-				fprintf(stderr, "Error, cannot start the scan operation.\n");
-			}
-			delay(1500);  // This delay seems to just start a scan mode. Why is there a 3000ms delay? Seems like you don't get anything at 300,1000 ms. Got at 1500,2000
-		}
-		void stopScanning(){
-			drv->stop();
-		}
-
-		// getLidarScan function:
-		sl_result capture(Scan& scan, int& n_samples, VectorXi& quality)
-		{
-			sl_result ans;
-
-			sl_lidar_response_measurement_node_hq_t nodes[8192];//array.
-			size_t   count = _countof(nodes);
-			// once we have count we can define Scan
-
-			//printf("\n %lu waiting for data...\n",count);
-			ans = drv->grabScanDataHq(nodes, count, 200);
-			//printf("initial error code: %x\n", ans);
-
-			int local_count = 0;
-			double dist;
-			double angle;
-			double last_angle = -999.0; // Initialize to impossible value
-			double angle_threshold = 1.0 * M_PI / 180.0; // 1 degree in radians
-
-			if (SL_IS_OK(ans)) {
-				drv->ascendScanData(nodes, count);
-				for (int pos = 0; pos < (int)count ; ++pos) {
-					if ( ( (int)(nodes[pos].quality >> SL_LIDAR_RESP_MEASUREMENT_QUALITY_SHIFT) ) > 40){
-						angle = (nodes[pos].angle_z_q14 * 1.5708) / 16384.f;
-						dist = nodes[pos].dist_mm_q2/4000.0f;
-						scan_curr_loader(local_count,0) = angle;
-						scan_curr_loader(local_count,1) = dist;
-						quality(local_count) = (int) (nodes[pos].quality >> SL_LIDAR_RESP_MEASUREMENT_QUALITY_SHIFT);
-						local_count++;
-					}
-					/* printf(" theta: %03.2f Dist: %08.2f \n", scan(pos,0),scan(pos,1)); */
-				}
-				n_samples = local_count;
-				//printf("local count: %d\n",local_count);
-				scan = scan_curr_loader.topRows(n_samples);
-			} else if (ans == SL_RESULT_OPERATION_TIMEOUT) {
-			} else {
-				printf("error code: %x\n", ans);
-				fprintf(stderr, "Error, cannot grab scan data.\n");
-			}
-
-			return ans;
-		}
-
-		bool initialize(){
-			if (!drv) {
-				fprintf(stderr, "insufficent memory, exit\n");
-				exit(-2);
-			}
-			// try to connect
-			if (SL_IS_FAIL((drv)->connect(_channel))) {
-				fprintf(stderr, "Error, cannot bind to the specified serial port.\n");
-			} else printf("connected");
-			// retrieving the device info
-			////////////////////////////////////////
-			sl_result   op_result;
-			sl_lidar_response_device_info_t devinfo;
-			op_result = drv->getDeviceInfo(devinfo);
-
-			if (SL_IS_FAIL(op_result)) {
-				if (op_result == SL_RESULT_OPERATION_TIMEOUT) {
-					// you can check the detailed failure reason
-					fprintf(stderr, "Error, operation time out.\n");
-				} else {
-					fprintf(stderr, "Error, unexpected error, code: %x\n", op_result);
-					// other unexpected result
-				}
-				return false; // break only made sense in the do-while loop
-			}
-			// print out the device serial number, firmware and hardware version number..
-			printf("SLAMTEC LIDAR S/N: ");
-			for (int pos = 0; pos < 16 ;++pos) {
-				printf("%02X", devinfo.serialnum[pos]);
-			}
-
-			printf("\n"
-					"Version:  %s \n"
-					"Firmware Ver: %d.%02d\n"
-					"Hardware Rev: %d\n"
-					, "SL_LIDAR_SDK_VERSION"
-					, devinfo.firmware_version>>8
-					, devinfo.firmware_version & 0xFF
-					, (int)devinfo.hardware_version);
-			// check the device health
-			////////////////////////////////////////
-			sl_lidar_response_device_health_t healthinfo;
-			op_result = drv->getHealth(healthinfo);
-			if (SL_IS_OK(op_result)) { // the macro IS_OK is the preperred way to judge whether the operation is succeed.
-				printf("Lidar health status : ");
-				switch (healthinfo.status) 
-				{
-					case SL_LIDAR_STATUS_OK:
-						printf("OK.");
-						break;
-					case SL_LIDAR_STATUS_WARNING:
-						printf("Warning.");
-						break;
-					case SL_LIDAR_STATUS_ERROR:
-						printf("Error.");
-						break;
-				}
-				printf(" (errorcode: %d)\n", healthinfo.error_code);
-
-			} else {
-				fprintf(stderr, "Error, cannot retrieve the lidar health code: %x\n", op_result);
-				return false;
-			}
-			if (healthinfo.status == SL_LIDAR_STATUS_ERROR) {
-				fprintf(stderr, "Error, slamtec lidar internal error detected. Please reboot the device to retry.\n");
-				// enable the following code if you want slamtec lidar to be reboot by software
-				// drv->reset();
-				return false;
-			}
-
-			drv->setMotorSpeed();
-			return true;
-
-		} // End initialize
-};
-
 
 // Capture and display is responsible for processing the data from LiDAR and putting it into scan as accepted/filtered Cartesian points. 
 // Main program

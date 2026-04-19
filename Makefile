@@ -51,8 +51,8 @@ lidar.exe : lidar.cpp $(EXTRA_OBJ) DDRCappController.o SerialWriter.o TelemetryS
 	g++ $(CXXFLAGS) $(C_INCLUDES) $(LDFLAGS) $< lidarScanner.cpp OccupancyGrid.cpp slam_posegraph.cpp pose.cpp scan_match_11.cpp mapper.cpp DDRCappController.cpp SerialWriter.cpp TelemetryServer.cpp $(LD_LIBS) -o $@
 
 # Reactive control only, with joystick modes
-lidar_react.exe : lidar_react.cpp $(EXTRA_OBJ) DDRCappController.o SerialWriter.o
-	g++ $(CXXFLAGS) $(C_INCLUDES) $(LDFLAGS) $< OccupancyGrid.cpp slam_posegraph.cpp pose.cpp scan_match_11.cpp mapper.cpp DDRCappController.cpp SerialWriter.cpp  $(LD_LIBS) -o $@
+lidar_react.exe : lidar_react.cpp $(EXTRA_OBJ) DDRCappController.o SerialWriter.o lidarScanner.o
+	g++ $(CXXFLAGS) $(C_INCLUDES) $(LDFLAGS) $< lidarScanner.cpp OccupancyGrid.cpp slam_posegraph.cpp pose.cpp scan_match_11.cpp mapper.cpp DDRCappController.cpp SerialWriter.cpp  $(LD_LIBS) -o $@
 
 # Early attempts at getting LiDAR
 main.exe : main.cpp $(EXTRA_OBJ)
