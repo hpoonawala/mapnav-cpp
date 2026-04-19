@@ -1,4 +1,4 @@
-#include "OccupancyGrid.h"
+#include "../include/OccupancyGrid.h"
 
 // Constructor: Initialize occupancy grid
 OccupancyGrid::OccupancyGrid(double w, double h, double res) 

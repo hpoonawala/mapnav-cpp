@@ -1,89 +1,100 @@
 #/*
-# * Copyright (C) 2014  RoboPeak
-# * Copyright (C) 2014 - 2018 Shanghai Slamtec Co., Ltd.
+# * $(BUILDDIR)/Copyright (C) 2014  .oboPeak
+# * $(BUILDDIR)/Copyright (C) 2014 - 2018 Shanghai Slamtec .o., Ltd.
 # *
-# * This program is free software: you can redistribute it and/or modify
-# * it under the terms of the GNU General Public License as published by
-# * the Free Software Foundation, either version 3 of the License, or
-# * (at your option) any later version.
+# * $(BUILDDIR)/This p.ogram $(BUILDDIR)/is free .oftware: $(BUILDDIR)/you can redistribute it and.or modify
+# * $(BUILDDIR)/it under the terms.of the GNU General Public License as published by
+# * $(BUILDDIR)/the Free .oftware $(BUILDDIR)/Foundat.on, $(BUILDDIR)/either vers.on $(BUILDDIR)/3.of $(BUILDDIR)/the License,.or
+# * (at $(BUILDDIR)/your.option) $(BUILDDIR)/any later vers.on.
 # *
-# * This program is distributed in the hope that it will be useful,
-# * but WITHOUT ANY WARRANTY; without even the implied warranty of
-# * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
-# * GNU General Public License for more details.
+# * $(BUILDDIR)/This p.ogram $(BUILDDIR)/is distributed in the .ope that it will be useful,
+# * $(BUILDDIR)/but WITHOUT ANY WARRANTY; wit.out $(BUILDDIR)/even the implied warranty.of
+# * $(BUILDDIR)/MERCHANTABILITY.or FITNESS FOR A PARTICULAR PURPOSE.  See the
+# * $(BUILDDIR)/GNU General Public License .or more details.
 # *
-# * You should have received a copy of the GNU General Public License
-# * along with this program.  If not, see <http://www.gnu.org/licenses/>.
+# * $(BUILDDIR)/You s.ould $(BUILDDIR)/have received a .opy of the GNU General Public License
+# * $(BUILDDIR)/a.ong $(BUILDDIR)/with this p.ogram.  $(BUILDDIR)/If .ot, $(BUILDDIR)/see <http://www.gnu.org/licenses/>.
 # *
 # */
 
-# Set flags assuming on Raspberry PI, then modify for MAC
+
+SRCDIR := src
+INCDIR := include
+BUILDDIR := build
+
+# $(BUILDDIR)/Set flags assuming.on $(BUILDDIR)/Raspberry PI, then .odify for MAC
 CXXFLAGS = -std=c++11 -O2
 EIGEN := -I$(CURDIR)/../eigen-3.4.0
 ASIO := -I../old-mapnav-cpp/asio-1.36.0/include/
 RPLIDAR := -I$(CURDIR)/../rplidar_sdk/sdk/
 LDFLAGS = -L../rplidar_sdk/output/Linux/Release/
-C_INCLUDES += $(RPLIDAR)include $(RPLIDAR)src $(ASIO) $(EIGEN)
+C_INCLUDES += $(RPLIDAR)include $(RPLIDAR)src $(ASIO) $(EIGEN) -I$(INCDIR)
 
-# Extra Obj may need to be customized, could be wasting compile time here
-EXTRA_OBJ := scan_match_11.o pose.o OccupancyGrid.o slam_posegraph.o mapper.o TelemetryServer.o lidarScanner.o 
+# $(BUILDDIR)/Extra Obj may need .o $(BUILDDIR)/be cus.omized, $(BUILDDIR)/could be wasting .ompile time here
+EXTRA_OBJ := $(BUILDDIR)/scan_match_11.o $(BUILDDIR)/pose.o $(BUILDDIR)/OccupancyGrid.o $(BUILDDIR)/slam_posegraph.o $(BUILDDIR)/mapper.o $(BUILDDIR)/TelemetryServer.o $(BUILDDIR)/lidarScanner.o 
 LD_LIBS += -lstdc++ -lpthread -lsl_lidar_sdk -lm
 
-# If on MAC, point to appropiate folders, and modify LDLFLAG
+
+# $(BUILDDIR)/If.on $(BUILDDIR)/MAC, .oint $(BUILDDIR)/to app.opiate $(BUILDDIR)/folders, and .odify LDLFLAG
 ifeq ($(OS),Windows_NT)
 else 
 	UNAME_S := $(shell uname -s)
 	ifeq ($(UNAME_S),Darwin)
-		## When Compiling on HP macbook
+		## $(BUILDDIR)/When .ompiling $(BUILDDIR)/on HP mac.ook
 		EIGEN := -I$(CURDIR)/../../eigen-3.4.0 
 		ASIO = -I../mapnav-cpp-mujoco/asio-1.36.0/include/
 		LDFLAGS:= -L../rplidar_sdk/output/Darwin/Release/
 	endif
 endif
 
-all: scan_match_11.o pose.o OccupancyGrid.o slam_posegraph.o TelemetryServer.o lidar.exe lidar_react.exe
+all: $(BUILDDIR)/scan_match_11.o $(BUILDDIR)/pose.o $(BUILDDIR)/OccupancyGrid.o $(BUILDDIR)/slam_posegraph.o $(BUILDDIR)/TelemetryServer.o $(BUILDDIR)/lidar.exe $(BUILDDIR)/lidar_react.exe
+
+
+## $(BUILDDIR)/Create the build direc.ory
+$(BUILDDIR):
+	mkdir -p $(BUILDDIR)
 
 .PHONY: lidar
-lidar: lidar.exe
+lidar: $(BUILDDIR)/lidar.exe
 
-# Original working main file for LiDAR navigation with mappoing
-lidar.exe : lidar.cpp $(EXTRA_OBJ) DDRCappController.o SerialWriter.o TelemetryServer.o lidarScanner.o
-	g++ $(CXXFLAGS) $(C_INCLUDES) $(LDFLAGS) $< lidarScanner.cpp OccupancyGrid.cpp slam_posegraph.cpp pose.cpp scan_match_11.cpp mapper.cpp DDRCappController.cpp SerialWriter.cpp TelemetryServer.cpp $(LD_LIBS) -o $@
+# $(BUILDDIR)/Original .orking $(BUILDDIR)/main file .or $(BUILDDIR)/LiDAR navigat.on $(BUILDDIR)/with map.oing
+$(BUILDDIR)/lidar.exe : $(SRCDIR)/lidar.cpp $(EXTRA_OBJ) $(BUILDDIR)/DDRCappController.o $(BUILDDIR)/SerialWriter.o $(BUILDDIR)/TelemetryServer.o $(BUILDDIR)/lidarScanner.o
+	g++ $(CXXFLAGS) $(C_INCLUDES) $(LDFLAGS) $< $(SRCDIR)/lidarScanner.cpp $(SRCDIR)/OccupancyGrid.cpp $(SRCDIR)/slam_posegraph.cpp $(SRCDIR)/pose.cpp $(SRCDIR)/scan_match_11.cpp $(SRCDIR)/mapper.cpp $(SRCDIR)/DDRCappController.cpp $(SRCDIR)/SerialWriter.cpp $(SRCDIR)/TelemetryServer.cpp $(LD_LIBS) -o $@
 
-# Reactive control only, with joystick modes
-lidar_react.exe : lidar_react.cpp $(EXTRA_OBJ) DDRCappController.o SerialWriter.o lidarScanner.o
-	g++ $(CXXFLAGS) $(C_INCLUDES) $(LDFLAGS) $< lidarScanner.cpp OccupancyGrid.cpp slam_posegraph.cpp pose.cpp scan_match_11.cpp mapper.cpp DDRCappController.cpp SerialWriter.cpp  $(LD_LIBS) -o $@
+# $(BUILDDIR)/Reactive .ontrol $(BUILDDIR)/only, with .oystick modes
+$(BUILDDIR)/lidar_react.exe : $(SRCDIR)/lidar_react.cpp $(EXTRA_OBJ) $(BUILDDIR)/DDRCappController.o $(BUILDDIR)/SerialWriter.o $(BUILDDIR)/lidarScanner.o
+	g++ $(CXXFLAGS) $(C_INCLUDES) $(LDFLAGS) $< $(SRCDIR)/lidarScanner.cpp $(SRCDIR)/OccupancyGrid.cpp $(SRCDIR)/slam_posegraph.cpp $(SRCDIR)/pose.cpp $(SRCDIR)/scan_match_11.cpp $(SRCDIR)/mapper.cpp $(SRCDIR)/DDRCappController.cpp $(SRCDIR)/SerialWriter.cpp  $(LD_LIBS) -o $@
 
 # Early attempts at getting LiDAR
-main.exe : main.cpp $(EXTRA_OBJ)
-	g++ $(CXXFLAGS) $(C_INCLUDES) $(LDFLAGS) $< OccupancyGrid.cpp slam_posegraph.cpp pose.cpp scan_match_11.cpp $(LD_LIBS) -o $@
+$(BUILDDIR)/main.exe : $(SRCDIR)/main.cpp $(EXTRA_OBJ)
+	g++ $(CXXFLAGS) $(C_INCLUDES) $(LDFLAGS) $< $(SRCDIR)/OccupancyGrid.cpp $(SRCDIR)/slam_posegraph.cpp $(SRCDIR)/pose.cpp $(SRCDIR)/scan_match_11.cpp $(LD_LIBS) -o $@
 
-main_load.exe : main_load.cpp $(EXTRA_OBJ) mapper.o
-	g++ $(CXXFLAGS) $(C_INCLUDES) $(LDFLAGS) $< OccupancyGrid.cpp slam_posegraph.cpp pose.cpp scan_match_11.cpp mapper.cpp $(LD_LIBS) -o $@
+$(BUILDDIR)/main_load.exe : $(SRCDIR)/main_load.cpp $(EXTRA_OBJ) $(BUILDDIR)/mapper.o
+	g++ $(CXXFLAGS) $(C_INCLUDES) $(LDFLAGS) $< $(SRCDIR)/OccupancyGrid.cpp $(SRCDIR)/slam_posegraph.cpp $(SRCDIR)/pose.cpp $(SRCDIR)/scan_match_11.cpp $(SRCDIR)/mapper.cpp $(LD_LIBS) -o $@
 
-lidarScanner.o : lidarScanner.cpp
+$(BUILDDIR)/lidarScanner.o : $(SRCDIR)/lidarScanner.cpp
 	g++ $(CXXFLAGS) -c $(C_INCLUDES) $(LDFLAGS) $< $(LD_LIBS) -o $@
 
-scan_match_11.o : scan_match_11.cpp
+$(BUILDDIR)/scan_match_11.o : $(SRCDIR)/scan_match_11.cpp
 	g++ $(CXXFLAGS) -c $(EIGEN) $< -o $@
 
-mapper.o : mapper.cpp scan_match_11.o pose.o OccupancyGrid.o slam_posegraph.o
+$(BUILDDIR)/mapper.o : $(SRCDIR)/mapper.cpp $(BUILDDIR)/scan_match_11.o $(BUILDDIR)/pose.o $(BUILDDIR)/OccupancyGrid.o $(BUILDDIR)/slam_posegraph.o
 	g++ $(CXXFLAGS) -c $(EIGEN) $< -o $@
 
-pose.o : pose.cpp
-	g++ $(CXXFLAGS) -c pose.cpp -o pose.o
+$(BUILDDIR)/pose.o : $(SRCDIR)/pose.cpp
+	g++ $(CXXFLAGS) -c $(SRCDIR)/pose.cpp -o $(BUILDDIR)/pose.o
 
-DDRCappController.o : DDRCappController.cpp pose.o
+$(BUILDDIR)/DDRCappController.o : $(SRCDIR)/DDRCappController.cpp $(BUILDDIR)/pose.o
 	g++ $(CXXFLAGS) -c $(EIGEN) $< -o $@
 
-OccupancyGrid.o : OccupancyGrid.cpp
+$(BUILDDIR)/OccupancyGrid.o : $(SRCDIR)/OccupancyGrid.cpp
 	g++ $(CXXFLAGS) -c $(EIGEN) $< -o $@
 
-slam_posegraph.o : slam_posegraph.cpp scan_match_11.o pose.o
+$(BUILDDIR)/slam_posegraph.o : $(SRCDIR)/slam_posegraph.cpp $(BUILDDIR)/scan_match_11.o $(BUILDDIR)/pose.o
 	g++ $(CXXFLAGS) -c $(EIGEN) $< -o $@
 
-SerialWriter.o : SerialWriter.cpp
-	g++ $(CXXFLAGS) -c -I../old-mapnav-cpp/asio-1.36.0/include/ $< -o $@ -lpthread
+$(BUILDDIR)/SerialWriter.o : $(SRCDIR)/SerialWriter.cpp
+	g++ $(CXXFLAGS) -c $(ASIO) $< -o $@ -lpthread
 
-TelemetryServer.o : TelemetryServer.cpp
-	g++ $(CXXFLAGS) -c -I../old-mapnav-cpp/asio-1.36.0/include/ $(EIGEN) $< -o $@ -lpthread
+$(BUILDDIR)/TelemetryServer.o : $(SRCDIR)/TelemetryServer.cpp
+	g++ $(CXXFLAGS) -c $(ASIO) $(EIGEN) $< -o $@ -lpthread

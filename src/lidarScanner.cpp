@@ -60,7 +60,7 @@ static inline void delay(sl_word_size_t ms){
 #include <sstream>
 #include <vector>
 #include <Eigen/Dense>
-#include "lidarScanner.h"
+#include "../include/lidarScanner.h"
 
 						//
 using namespace sl;

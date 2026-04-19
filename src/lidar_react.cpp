@@ -35,8 +35,8 @@
 #include "sl_lidar_driver.h"
 
 // scan match includes
-#include "scan_match_11.h"
-#include "pose.h"
+#include "../include/scan_match_11.h"
+#include "../include/pose.h"
 #include <cmath>
 
 #ifndef _countof
@@ -63,22 +63,25 @@ static inline void delay(sl_word_size_t ms){
 #include <iostream>
 #include <sstream>
 #include <vector>
+#include <Eigen/Dense>
 
 // Slam, map, control includes
-#include "OccupancyGrid.h"
-#include "slam_posegraph.h"
-#include "mapper.h"
-#include "DDRCappController.h"
-#include "lidarScanner.h"
+#include "../include/OccupancyGrid.h"
+#include "../include/slam_posegraph.h"
+#include "../include/mapper.h"
+#include "../include/DDRCappController.h"
+#include "../include/lidarScanner.h"
 
 // Serial includes
-#include "SerialWriter.h"
+#include "../include/SerialWriter.h"
 #include <iomanip>
 #include <sstream>
 #include <exception>
 
-// Telemetry includes
-#include "TelemetryServer.h"
+// Watchdog timer
+#include <pthread.h>
+#include <time.h>
+#include <atomic>
 
 using namespace sl;
 using namespace std;
@@ -118,7 +121,8 @@ int send_cmd(int v, int w){
 	try {
 		// Method 1: One-off message (closest to Python example)
 		//std::cout << "=== Sending single command ===" << std::endl;
-		write_serial_message("/dev/ttyACM0", result.c_str());
+		//write_serial_message("/dev/ttyACM0", result.c_str());
+		write_and_read_serial_message("/dev/ttyACM0", result.c_str(),115200,1000);
 		// if (toggle_state == 0) write_serial_message("/dev/ttyACM0", result.c_str());
 		// else write_serial_message("/dev/ttyACM0", "S.+100.+100.0\n");
 
@@ -147,13 +151,10 @@ int main(int argc, const char * argv[]) {
 	}
 
 	// Hard codes assumption that we are using SERIAL. Don't need argv[1] or 2], really.
-	const char * opt_is_channel = argv[1]; // --channel 
-	opt_channel = argv[2]; // --serial
-	opt_channel_param_first = argv[3]; // USB Port
-	if (argc>4) opt_channel_param_second = strtoul(argv[4], NULL, 10); // gets baud rate
-	sl_u32 num_steps;
-	if (argc > 5) num_steps = strtoul(argv[5], NULL, 10);
-	else num_steps=200;
+	const char * opt_is_channel = argv[1];
+	opt_channel = argv[2];
+	opt_channel_param_first = argv[3];
+	if (argc>4) opt_channel_param_second = strtoul(argv[4], NULL, 10);
 
 	// create the driver instance. Could create first thing, since it is independent of channel
 
@@ -167,88 +168,26 @@ int main(int argc, const char * argv[]) {
 
 	lidarScanner.startScanning();
 
-	std::string data_target = "localdata_2.txt";
+	std::string data_target = "localdata_3.txt";
 	// define output file and clear it
 	std::ofstream scan_file;
 	scan_file.open(data_target); // clears file 
 	scan_file.close();
 	scan_file.open(data_target,std::ios::app );
 
-	// Start telemetry server
-	TelemetryServer telemetry(8765);
-	telemetry.start();
-	Pose2D navigation_goal(1.0,  0.0, 0.0);
-	bool navigation_paused = false;
-
 	// Start loop
-	int loop_iters = int(num_steps);
+	int loop_iters = 300;
 	sl_result lidar_result;
 	Mapper mapper;
-	DDRCappController controller({}, 0.5, 100.0, 60.0);
-	auto start = std::chrono::high_resolution_clock::now();
-	auto end = std::chrono::high_resolution_clock::now();
-	auto duration = std::chrono::duration_cast<std::chrono::milliseconds>(end - start);
+	DDRCappController controller({}, 0.5, 200.0, 060.0);
 	for(int k=0;k<loop_iters;k++){
 		printf("Loop: %d / %d\n",k,loop_iters); 
 		lidar_result = lidarScanner.capture(scan_curr,n_samples,quality); // fills scan_curr with polar version
-		cout << "n samples: " << n_samples << "\n";
-
-
 		if (lidar_result == SL_RESULT_OPERATION_TIMEOUT) continue;
-		mapper.update_scans(scan_curr);
-		std::cout << mapper.curr_pose << "\n";
-
-		// Publish pose to telemetry clients
-		if (k % 5 ==0) {
-		telemetry.publishPose(mapper.curr_pose, k);
-		}
-		telemetry.tick();
-
-		// Process telemetry commands
-		while (telemetry.hasCommand()) {
-			TelemetryCommand cmd = telemetry.popCommand();
-			if (cmd.type == CommandType::SET_GOAL) {
-				navigation_goal = Pose2D(cmd.x, cmd.y, 0.0);
-				//mapper.plan_path(navigation_goal);
-				//telemetry.publishPath(mapper.path);
-				navigation_paused = false;
-				std::cout << "Telemetry: New goal set to (" << cmd.x << ", " << cmd.y << ")\n";
-			} else if (cmd.type == CommandType::STOP) {
-				navigation_paused = true;
-				send_stop();
-				std::cout << "Telemetry: Navigation paused\n";
-			} else if (cmd.type == CommandType::RESUME) {
-				navigation_paused = false;
-				std::cout << "Telemetry: Navigation resumed\n";
-			} else if (cmd.type == CommandType::REQUEST_MAP) {
-				telemetry.publishMap(mapper.grid);
-				//telemetry.publishPath(mapper.path);
-				telemetry.tick();
-			}
-		}
 		for(int ii = 0; ii < n_samples; ii++){
 			scan_file << scan_curr(ii,0) << "," << scan_curr(ii,1) << "," << quality(ii) << ",";
 		}scan_file << "\n";
-		if (k % 10 == 0 && k > 5) {
-			send_stop();
-			mapper.slam();
-			//mapper.plan_path(navigation_goal);
-			//if (!mapper.path.empty()) {
-			//	controller.setPath(mapper.path);
-			//}
-
-			//mapper.grid.writePGMFile("occupancy_grid_slam_" + std::to_string(k) + ".pgm");
-
-			// Publish map and path to telemetry clients
-			telemetry.publishMap(mapper.grid);
-			telemetry.tick();
-			//telemetry.publishPath(mapper.path);
-		}
-		end = std::chrono::high_resolution_clock::now();
-		duration = std::chrono::duration_cast<std::chrono::milliseconds>(end - start);
-		printf("initial NM Time elapsed: "); printf("%d",duration.count());printf(" milliseconds.\n");
-		start = std::chrono::high_resolution_clock::now();
-		if (k > 10 && !navigation_paused) {
+		if (k > 10) {
 			std::pair<int,int> velocities = controller.computeControl(mapper.curr_pose, scan_curr);
 			std::cout << "velocities:" << velocities.first << " " << velocities.second << "\n";
 			send_cmd(velocities.first,velocities.second);
@@ -260,15 +199,7 @@ int main(int argc, const char * argv[]) {
 
 	send_stop();
 
-	// Stop telemetry server
-	telemetry.stop();
-
 	lidarScanner.stopScanning();
 
-	// Run slam 
-	mapper.slam();
-	mapper.plan_path(navigation_goal);
-	//mapper.grid.writeGridToFile("occupancy_grid_slam.txt", 3.0, 1.5);
-	mapper.grid.writePGMFile("occupancy_grid_slam_final.pgm");
 	return 0;
 }

@@ -2,8 +2,8 @@
 // slam_posegraph.cpp - Implementation file
 // ============================================================================
 
-#include "slam_posegraph.h"
-#include "scan_match_11.h"
+#include "../include/slam_posegraph.h"
+#include "../include/scan_match_11.h"
 #include <stdexcept>
 #include <iostream>
 

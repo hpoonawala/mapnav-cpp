@@ -34,8 +34,8 @@
 #include "sl_lidar_driver.h"
 
 // scan match includes
-#include "scan_match_11.h"
-#include "pose.h"
+#include "../include/scan_match_11.h"
+#include "../include/pose.h"
 #include <cmath>
 
 #ifndef _countof
@@ -63,8 +63,8 @@ static inline void delay(sl_word_size_t ms){
 #include <sstream>
 #include <vector>
 #include <Eigen/Dense>
-#include "OccupancyGrid.h"
-#include "slam_posegraph.h"
+#include "../include/OccupancyGrid.h"
+#include "../include/slam_posegraph.h"
 
 
 using namespace sl;

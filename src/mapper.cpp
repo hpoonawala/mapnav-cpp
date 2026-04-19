@@ -4,11 +4,11 @@
 #include <sstream>
 #include <vector>
 #include <Eigen/Dense>
-#include "pose.h"
-#include "scan_match_11.h"
-#include "OccupancyGrid.h"
-#include "slam_posegraph.h"
-#include "mapper.h"
+#include "../include/pose.h"
+#include "../include/scan_match_11.h"
+#include "../include/OccupancyGrid.h"
+#include "../include/slam_posegraph.h"
+#include "../include/mapper.h"
 #include <chrono>
 #include <stdio.h>
 

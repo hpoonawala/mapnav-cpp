@@ -35,8 +35,8 @@
 #include "sl_lidar_driver.h"
 
 // scan match includes
-#include "scan_match_11.h"
-#include "pose.h"
+#include "../include/scan_match_11.h"
+#include "../include/pose.h"
 #include <cmath>
 
 #ifndef _countof
@@ -66,13 +66,13 @@ static inline void delay(sl_word_size_t ms){
 #include <Eigen/Dense>
 
 // Slam, map, control includes
-#include "OccupancyGrid.h"
-#include "slam_posegraph.h"
-#include "mapper.h"
-#include "DDRCappController.h"
+#include "../include/OccupancyGrid.h"
+#include "../include/slam_posegraph.h"
+#include "../include/mapper.h"
+#include "../include/DDRCappController.h"
 
 // Serial includes
-#include "SerialWriter.h"
+#include "../include/SerialWriter.h"
 #include <iomanip>
 #include <sstream>
 #include <exception>
