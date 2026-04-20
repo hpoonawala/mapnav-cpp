@@ -25,7 +25,7 @@
  *
  */
 
-
+// Note that the Scan returned has only n_samples in it
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
@@ -62,6 +62,7 @@ static inline void delay(sl_word_size_t ms){
 #include <Eigen/Dense>
 #include "../include/lidarScanner.h"
 
+static const int LIDAR_RETURN_QUALITY_THRESHOLD = 40;
 						//
 using namespace sl;
 using namespace std;
@@ -110,7 +111,7 @@ using namespace Eigen;
 			if (SL_IS_OK(ans)) {
 				drv->ascendScanData(nodes, count);
 				for (int pos = 0; pos < (int)count ; ++pos) {
-					if ( ( (int)(nodes[pos].quality >> SL_LIDAR_RESP_MEASUREMENT_QUALITY_SHIFT) ) > 40){
+					if ( ( (int)(nodes[pos].quality >> SL_LIDAR_RESP_MEASUREMENT_QUALITY_SHIFT) ) > LIDAR_RETURN_QUALITY_THRESHOLD){
 						angle = (nodes[pos].angle_z_q14 * 1.5708) / 16384.f;
 						if (last_angle < 0 || fabs(angle - last_angle) >= angle_threshold) {
 							dist = nodes[pos].dist_mm_q2/4000.0f;
@@ -206,7 +207,7 @@ using namespace Eigen;
 				return false;
 			}
 
-			drv->setMotorSpeed();
+			drv->setMotorSpeed(0);
 			return true;
 
 		} // End initialize

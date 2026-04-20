@@ -67,9 +67,8 @@ class ScanSaver {
 		ScanSaver(const char* data_target) {
 			scan_file.open(data_target, std::ios::out | std::ios::trunc); 
 		}
-		void save(const Scan& scan, int n_samples){
-			n_samples = std::min(n_samples,(int)scan.rows());
-			for(int ii = 0; ii < n_samples; ii++){
+		void save(const Scan& scan){
+			for(int ii = 0; ii < scan.rows(); ii++){
 				scan_file << scan(ii,0) << "," << scan(ii,1) << "," << 0.0 << ",";
 			}
 			scan_file << "\n";
@@ -135,7 +134,7 @@ int main(int argc, const char * argv[]) {
 		printf("Loop: %d / %d\n",k,loop_iters); 
 
 		// Get Scan 
-		if (!lidar.getScan(scan_curr)) continue; // but will not run SLAM
+		if (!lidar.getScan(scan_curr)) {cout <<"delay 100ms\n";delay(100); continue;} // but will not run SLAM
 		// Update pose by scan matching
 		mapper.update_scans(scan_curr);
 		std::cout << "Current pose according to mapper:" << mapper.curr_pose << "\n";
