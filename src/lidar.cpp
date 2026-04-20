@@ -1,31 +1,3 @@
-
-/*
- *  SLAMTEC LIDAR
- *  Simple Data Grabber Demo App
- *
- *  Copyright (c) 2009 - 2014 RoboPeak Team
- *  http://www.robopeak.com
- *  Copyright (c) 2014 - 2020 Shanghai Slamtec Co., Ltd.
- *  http://www.slamtec.com
- *
- */
-/*
- * This program is free software: you can redistribute it and/or modify
- * it under the terms of the GNU General Public License as published by
- * the Free Software Foundation, either version 3 of the License, or
- * (at your option) any later version.
- *
- * This program is distributed in the hope that it will be useful,
- * but WITHOUT ANY WARRANTY; without even the implied warranty of
- * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
- * GNU General Public License for more details.
- *
- * You should have received a copy of the GNU General Public License
- * along with this program.  If not, see <http://www.gnu.org/licenses/>.
- *
- */
-
-
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
@@ -70,6 +42,7 @@ static inline void delay(sl_word_size_t ms){
 #include "mapper.h"
 #include "../include/DDRCappController.h"
 #include "../include/lidarScanner.h"
+#include "../include/lidarThread.h"
 
 // Serial includes
 #include "../include/SerialWriter.h"
@@ -88,9 +61,6 @@ using namespace Eigen;
 int send_stop(){
 	try {
 		write_serial_message("/dev/ttyACM0", "S.+000.+000.0\n");
-
-
-
 	} catch (const std::exception& e) {
 		std::cerr << "Error: " << e.what() << std::endl;
 		return 1;
@@ -117,13 +87,7 @@ int send_cmd(int v, int w){
 
 	try {
 		// Method 1: One-off message (closest to Python example)
-		//std::cout << "=== Sending single command ===" << std::endl;
 		write_serial_message("/dev/ttyACM0", result.c_str());
-		// if (toggle_state == 0) write_serial_message("/dev/ttyACM0", result.c_str());
-		// else write_serial_message("/dev/ttyACM0", "S.+100.+100.0\n");
-
-
-
 	} catch (const std::exception& e) {
 		std::cerr << "Error: " << e.what() << std::endl;
 		return 1;
@@ -155,19 +119,12 @@ int main(int argc, const char * argv[]) {
 	if (argc > 5) num_steps = strtoul(argv[5], NULL, 10);
 	else num_steps=200;
 
-	// create the driver instance. Could create first thing, since it is independent of channel
-
-	LidarScanner lidarScanner(opt_channel_param_first,opt_channel_param_second);
-	if(lidarScanner.initialize()) ; // If the initialization fails, return with -1/ 
-	else return -1;
+	// This next line can throw an exception that is not being handled anywhere for now
+	LidarThread lidar(opt_channel_param_first,opt_channel_param_second);
 
 	Scan scan_curr;  // 100 points, range scan
-	VectorXi quality(8152);  // 100 points
-	int n_samples=0;
 
-	lidarScanner.startScanning();
-
-	std::string data_target = "localdata_2.txt";
+	std::string data_target = "localdata_99.txt";
 	// define output file and clear it
 	std::ofstream scan_file;
 	scan_file.open(data_target); // clears file 
@@ -190,13 +147,10 @@ int main(int argc, const char * argv[]) {
 	auto duration = std::chrono::duration_cast<std::chrono::milliseconds>(end - start);
 	for(int k=0;k<loop_iters;k++){
 		printf("Loop: %d / %d\n",k,loop_iters); 
-		lidar_result = lidarScanner.capture(scan_curr,n_samples,quality); // fills scan_curr with polar version
-		cout << "n samples: " << n_samples << "\n";
 
-
-		if (lidar_result == SL_RESULT_OPERATION_TIMEOUT) continue;
+		if (!lidar.getScan(scan_curr)) continue; // but will not run SLAM
 		mapper.update_scans(scan_curr);
-		std::cout << mapper.curr_pose << "\n";
+		std::cout << "Current pose according to mapper:" << mapper.curr_pose << "\n";
 
 		// Publish pose to telemetry clients
 		if (k % 5 ==0) {
@@ -226,9 +180,6 @@ int main(int argc, const char * argv[]) {
 				telemetry.tick();
 			}
 		}
-		for(int ii = 0; ii < n_samples; ii++){
-			scan_file << scan_curr(ii,0) << "," << scan_curr(ii,1) << "," << quality(ii) << ",";
-		}scan_file << "\n";
 		if (k % 10 == 0 && k > 5) {
 			send_stop();
 			mapper.slam();
@@ -263,7 +214,6 @@ int main(int argc, const char * argv[]) {
 	// Stop telemetry server
 	telemetry.stop();
 
-	lidarScanner.stopScanning();
 
 	// Run slam 
 	mapper.slam();
