@@ -7,7 +7,7 @@
 #include "sl_lidar_driver.h"
 
 // scan match includes
-#include "scan_match_11.h"
+#include "../include/scan_match_11.h"
 #include "../include/pose.h"
 #include <cmath>
 
@@ -37,67 +37,60 @@ static inline void delay(sl_word_size_t ms){
 #include <vector>
 
 // Slam, map, control includes
-#include "../include/OccupancyGrid.h"
-#include "../include/slam_posegraph.h"
+#include "OccupancyGrid.h"
+#include "slam_posegraph.h"
 #include "mapper.h"
-#include "../include/DDRCappController.h"
-#include "../include/lidarScanner.h"
-#include "../include/lidarThread.h"
+#include "DDRCappController.h"
+#include "lidarScanner.h"
+#include "lidarThread.h"
 
 // Serial includes
-#include "../include/SerialWriter.h"
+#include "SerialWriter.h"
+#include "MotorController.h"
 #include <iomanip>
 #include <sstream>
 #include <exception>
 
+static const char* MOTOR_PORT = "/dev/ttyACM0"; // Connection to ESP32s3
+static const char* SCAN_DATA_FILE = "localdata_99.txt"; // where to store all the scans obtained
+
 // Telemetry includes
 #include "TelemetryServer.h"
+#include "timer.h"
 
 using namespace sl;
 using namespace std;
 using namespace Eigen;
 
-// Controller command for stopping
-int send_stop(){
-	try {
-		write_serial_message("/dev/ttyACM0", "S.+000.+000.0\n");
-	} catch (const std::exception& e) {
-		std::cerr << "Error: " << e.what() << std::endl;
-		return 1;
-	}
-	return 0;
-}
+class ScanSaver {
+	public:
+		ScanSaver(const char* data_target) {
+			scan_file.open(data_target, std::ios::out | std::ios::trunc); 
+		}
+		void save(const Scan& scan, int n_samples){
+			n_samples = std::min(n_samples,(int)scan.rows());
+			for(int ii = 0; ii < n_samples; ii++){
+				scan_file << scan(ii,0) << "," << scan(ii,1) << "," << 0.0 << ",";
+			}
+			scan_file << "\n";
+		}
+	private:
+		std::ofstream scan_file;
 
-// Controller command for velocities 
-int send_cmd(int v, int w){
-	bool signflag = w > 0 ? false : true;
-	std::ostringstream oss_v;
-	oss_v << std::setfill('0') << std::setw(3) << std::abs(v);
-	std::ostringstream oss;
-	oss << std::setfill('0') << std::setw(3) << std::abs(w);
-	// Build string now "D.sXXX.sXXX.0"
-	std::string result = "D.+";
-	result +=oss_v.str();  // 
-	result +=".";  // "
-	if (signflag) result +="+"; 
-	else result+="-";
-	result +=oss.str();  // "005"
-	result +=".0\n";  // "005"
-	//printf("\nw_raw: %f\n",w_raw);
+};
 
-	try {
-		// Method 1: One-off message (closest to Python example)
-		write_serial_message("/dev/ttyACM0", result.c_str());
-	} catch (const std::exception& e) {
-		std::cerr << "Error: " << e.what() << std::endl;
-		return 1;
-	}
-	return 0;
-}
 
 // Capture and display is responsible for processing the data from LiDAR and putting it into scan as accepted/filtered Cartesian points. 
-// Main program
+// Main program:
+// Set up lidar, mapping objects, helper objects, 
+// then loop of 
+//     get-scan, 
+//     pose odometry, 
+//     occasional stop-for-SLAM correction
 int main(int argc, const char * argv[]) {
+
+
+	// Parse arguments necessary for starting the lidar. 
 	const char *opt_channel = NULL;
 	const char *opt_channel_param_first = NULL;
 	sl_u32      opt_channel_param_second = 0;
@@ -119,17 +112,11 @@ int main(int argc, const char * argv[]) {
 	if (argc > 5) num_steps = strtoul(argv[5], NULL, 10);
 	else num_steps=200;
 
+	// Initialize the LiDAR
 	// This next line can throw an exception that is not being handled anywhere for now
 	LidarThread lidar(opt_channel_param_first,opt_channel_param_second);
-
 	Scan scan_curr;  // 100 points, range scan
-
-	std::string data_target = "localdata_99.txt";
-	// define output file and clear it
-	std::ofstream scan_file;
-	scan_file.open(data_target); // clears file 
-	scan_file.close();
-	scan_file.open(data_target,std::ios::app );
+	ScanSaver scan_saver(SCAN_DATA_FILE);
 
 	// Start telemetry server
 	TelemetryServer telemetry(8765);
@@ -140,25 +127,26 @@ int main(int argc, const char * argv[]) {
 	// Start loop
 	int loop_iters = int(num_steps);
 	sl_result lidar_result;
-	Mapper mapper;
-	DDRCappController controller({}, 0.5, 100.0, 60.0);
-	auto start = std::chrono::high_resolution_clock::now();
-	auto end = std::chrono::high_resolution_clock::now();
-	auto duration = std::chrono::duration_cast<std::chrono::milliseconds>(end - start);
+	Mapper mapper;	// stores scan history and manages map
+	MotorController motor(MOTOR_PORT); // for sending commands to the motors 
+	DDRCappController controller({}, 0.5, 100.0, 60.0); // compute control from pose and scan
+	Timer timer; // to time events. .reset() and .mark(string)
 	for(int k=0;k<loop_iters;k++){
 		printf("Loop: %d / %d\n",k,loop_iters); 
 
+		// Get Scan 
 		if (!lidar.getScan(scan_curr)) continue; // but will not run SLAM
+		// Update pose by scan matching
 		mapper.update_scans(scan_curr);
 		std::cout << "Current pose according to mapper:" << mapper.curr_pose << "\n";
 
-		// Publish pose to telemetry clients
+		// Publish pose to telemetry clients occasionally
 		if (k % 5 ==0) {
-		telemetry.publishPose(mapper.curr_pose, k);
+			telemetry.publishPose(mapper.curr_pose, k);
 		}
-		telemetry.tick();
+		telemetry.tick(); // process telemetry
 
-		// Process telemetry commands
+		// Process telemetry commands. Typically fast for low command rate
 		while (telemetry.hasCommand()) {
 			TelemetryCommand cmd = telemetry.popCommand();
 			if (cmd.type == CommandType::SET_GOAL) {
@@ -169,7 +157,7 @@ int main(int argc, const char * argv[]) {
 				std::cout << "Telemetry: New goal set to (" << cmd.x << ", " << cmd.y << ")\n";
 			} else if (cmd.type == CommandType::STOP) {
 				navigation_paused = true;
-				send_stop();
+				motor.stop();
 				std::cout << "Telemetry: Navigation paused\n";
 			} else if (cmd.type == CommandType::RESUME) {
 				navigation_paused = false;
@@ -180,8 +168,11 @@ int main(int argc, const char * argv[]) {
 				telemetry.tick();
 			}
 		}
+
+		timer.mark("initial NM Time elapsed: "); timer.reset();
+		// Check for SLAM point
 		if (k % 10 == 0 && k > 5) {
-			send_stop();
+			motor.stop();
 			mapper.slam();
 			//mapper.plan_path(navigation_goal);
 			//if (!mapper.path.empty()) {
@@ -194,28 +185,26 @@ int main(int argc, const char * argv[]) {
 			telemetry.publishMap(mapper.grid);
 			telemetry.tick();
 			//telemetry.publishPath(mapper.path);
+			timer.mark("SLAM elapsed: "); timer.reset();
 		}
-		end = std::chrono::high_resolution_clock::now();
-		duration = std::chrono::duration_cast<std::chrono::milliseconds>(end - start);
-		printf("initial NM Time elapsed: "); printf("%d",duration.count());printf(" milliseconds.\n");
-		start = std::chrono::high_resolution_clock::now();
+
+		// Send out control based on current pose
 		if (k > 10 && !navigation_paused) {
 			std::pair<int,int> velocities = controller.computeControl(mapper.curr_pose, scan_curr);
 			std::cout << "velocities:" << velocities.first << " " << velocities.second << "\n";
-			send_cmd(velocities.first,velocities.second);
+			motor.send(velocities.first,velocities.second);
 		} else {
-			send_stop();
+			motor.stop();
 		}
 	}
-	scan_file.close();
 
-	send_stop();
+	motor.stop(); // Stop the wheels 
 
 	// Stop telemetry server
 	telemetry.stop();
 
 
-	// Run slam 
+	// Run final slam 
 	mapper.slam();
 	mapper.plan_path(navigation_goal);
 	//mapper.grid.writeGridToFile("occupancy_grid_slam.txt", 3.0, 1.5);

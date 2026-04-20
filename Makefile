@@ -1,23 +1,3 @@
-#/*
-# * $(BUILDDIR)/Copyright (C) 2014  .oboPeak
-# * $(BUILDDIR)/Copyright (C) 2014 - 2018 Shanghai Slamtec .o., Ltd.
-# *
-# * $(BUILDDIR)/This p.ogram $(BUILDDIR)/is free .oftware: $(BUILDDIR)/you can redistribute it and.or modify
-# * $(BUILDDIR)/it under the terms.of the GNU General Public License as published by
-# * $(BUILDDIR)/the Free .oftware $(BUILDDIR)/Foundat.on, $(BUILDDIR)/either vers.on $(BUILDDIR)/3.of $(BUILDDIR)/the License,.or
-# * (at $(BUILDDIR)/your.option) $(BUILDDIR)/any later vers.on.
-# *
-# * $(BUILDDIR)/This p.ogram $(BUILDDIR)/is distributed in the .ope that it will be useful,
-# * $(BUILDDIR)/but WITHOUT ANY WARRANTY; wit.out $(BUILDDIR)/even the implied warranty.of
-# * $(BUILDDIR)/MERCHANTABILITY.or FITNESS FOR A PARTICULAR PURPOSE.  See the
-# * $(BUILDDIR)/GNU General Public License .or more details.
-# *
-# * $(BUILDDIR)/You s.ould $(BUILDDIR)/have received a .opy of the GNU General Public License
-# * $(BUILDDIR)/a.ong $(BUILDDIR)/with this p.ogram.  $(BUILDDIR)/If .ot, $(BUILDDIR)/see <http://www.gnu.org/licenses/>.
-# *
-# */
-
-
 SRCDIR := src
 INCDIR := include
 BUILDDIR := build
@@ -31,9 +11,9 @@ LDFLAGS = -L../rplidar_sdk/output/Linux/Release/
 C_INCLUDES += $(RPLIDAR)include $(RPLIDAR)src $(ASIO) $(EIGEN) -I$(INCDIR)
 
 # $(BUILDDIR)/Extra Obj may need .o $(BUILDDIR)/be cus.omized, $(BUILDDIR)/could be wasting .ompile time here
-EXTRA_OBJ := $(BUILDDIR)/scan_match_11.o $(BUILDDIR)/pose.o $(BUILDDIR)/OccupancyGrid.o $(BUILDDIR)/slam_posegraph.o $(BUILDDIR)/mapper.o $(BUILDDIR)/TelemetryServer.o $(BUILDDIR)/lidarScanner.o $(BUILDDIR)/lidarThread.o 
+EXTRA_OBJ := $(BUILDDIR)/scan_match_11.o $(BUILDDIR)/pose.o $(BUILDDIR)/OccupancyGrid.o $(BUILDDIR)/slam_posegraph.o $(BUILDDIR)/mapper.o $(BUILDDIR)/TelemetryServer.o $(BUILDDIR)/lidarScanner.o $(BUILDDIR)/lidarThread.o $(BUILDDIR)/MotorController.o
 
-LD_LIBS += -lstdc++ -lpthread -lsl_lidar_sdk -lm
+LD_LIBS += -lsl_lidar_sdk -lm
 
 
 # $(BUILDDIR)/If.on $(BUILDDIR)/MAC, .oint $(BUILDDIR)/to app.opiate $(BUILDDIR)/folders, and .odify LDLFLAG
@@ -59,11 +39,15 @@ $(BUILDDIR):
 lidar: $(BUILDDIR)/lidar.exe
 
 # $(BUILDDIR)/Original .orking $(BUILDDIR)/main file .or $(BUILDDIR)/LiDAR navigat.on $(BUILDDIR)/with map.oing
-$(BUILDDIR)/lidar.exe : $(SRCDIR)/lidar.cpp $(EXTRA_OBJ) $(BUILDDIR)/DDRCappController.o $(BUILDDIR)/SerialWriter.o $(BUILDDIR)/TelemetryServer.o $(BUILDDIR)/lidarScanner.o $(BUILDDIR)/lidarThread.o
-	g++ $(CXXFLAGS) $(C_INCLUDES) $(LDFLAGS) $< $(SRCDIR)/lidarThread.cpp $(SRCDIR)/OccupancyGrid.cpp $(SRCDIR)/lidarScanner.cpp $(SRCDIR)/slam_posegraph.cpp $(SRCDIR)/pose.cpp $(SRCDIR)/scan_match_11.cpp $(SRCDIR)/mapper.cpp $(SRCDIR)/DDRCappController.cpp $(SRCDIR)/SerialWriter.cpp $(SRCDIR)/TelemetryServer.cpp $(LD_LIBS) -o $@
+$(BUILDDIR)/lidar.exe : $(SRCDIR)/lidar.cpp $(EXTRA_OBJ) $(BUILDDIR)/DDRCappController.o $(BUILDDIR)/SerialWriter.o $(BUILDDIR)/TelemetryServer.o $(BUILDDIR)/lidarScanner.o $(BUILDDIR)/lidarThread.o $(BUILDDIR)/MotorController.o
+	g++ $(CXXFLAGS) $(C_INCLUDES) $(LDFLAGS) $< $(SRCDIR)/lidarThread.cpp $(SRCDIR)/OccupancyGrid.cpp $(SRCDIR)/lidarScanner.cpp $(SRCDIR)/slam_posegraph.cpp $(SRCDIR)/pose.cpp $(SRCDIR)/scan_match_11.cpp $(SRCDIR)/mapper.cpp $(SRCDIR)/DDRCappController.cpp $(SRCDIR)/SerialWriter.cpp $(SRCDIR)/TelemetryServer.cpp $(SRCDIR)/MotorController.cpp $(LD_LIBS) -o $@
 
 # $(BUILDDIR)/Reactive .ontrol $(BUILDDIR)/only, with .oystick modes
 $(BUILDDIR)/lidar_react.exe : $(SRCDIR)/lidar_react.cpp $(EXTRA_OBJ) $(BUILDDIR)/DDRCappController.o $(BUILDDIR)/SerialWriter.o $(BUILDDIR)/lidarScanner.o
+	g++ $(CXXFLAGS) $(C_INCLUDES) $(LDFLAGS) $< $(SRCDIR)/lidarScanner.cpp $(SRCDIR)/OccupancyGrid.cpp $(SRCDIR)/slam_posegraph.cpp $(SRCDIR)/pose.cpp $(SRCDIR)/scan_match_11.cpp $(SRCDIR)/mapper.cpp $(SRCDIR)/DDRCappController.cpp $(SRCDIR)/SerialWriter.cpp  $(LD_LIBS) -o $@
+
+# $(BUILDDIR)/Reactive .ontrol $(BUILDDIR)/only, with .oystick modes
+$(BUILDDIR)/wtchdog_lidar.exe : $(SRCDIR)/wtchdog_lidar.cpp $(EXTRA_OBJ) $(BUILDDIR)/DDRCappController.o $(BUILDDIR)/SerialWriter.o $(BUILDDIR)/lidarScanner.o
 	g++ $(CXXFLAGS) $(C_INCLUDES) $(LDFLAGS) $< $(SRCDIR)/lidarScanner.cpp $(SRCDIR)/OccupancyGrid.cpp $(SRCDIR)/slam_posegraph.cpp $(SRCDIR)/pose.cpp $(SRCDIR)/scan_match_11.cpp $(SRCDIR)/mapper.cpp $(SRCDIR)/DDRCappController.cpp $(SRCDIR)/SerialWriter.cpp  $(LD_LIBS) -o $@
 
 # Early attempts at getting LiDAR
@@ -74,10 +58,10 @@ $(BUILDDIR)/main_load.exe : $(SRCDIR)/main_load.cpp $(EXTRA_OBJ) $(BUILDDIR)/map
 	g++ $(CXXFLAGS) $(C_INCLUDES) $(LDFLAGS) $< $(SRCDIR)/OccupancyGrid.cpp $(SRCDIR)/slam_posegraph.cpp $(SRCDIR)/pose.cpp $(SRCDIR)/scan_match_11.cpp $(SRCDIR)/mapper.cpp $(LD_LIBS) -o $@
 
 $(BUILDDIR)/lidarScanner.o : $(SRCDIR)/lidarScanner.cpp
-	g++ $(CXXFLAGS) -c $(C_INCLUDES) $(LDFLAGS) $< $(LD_LIBS) -o $@
+	g++ $(CXXFLAGS) -c $(C_INCLUDES) $< -o $@
 
 $(BUILDDIR)/lidarThread.o : $(SRCDIR)/lidarThread.cpp
-	g++ $(CXXFLAGS) -c $(C_INCLUDES) $(LDFLAGS) $< $(LD_LIBS) -o $@
+	g++ $(CXXFLAGS) -c $(C_INCLUDES) $< -o $@
 
 $(BUILDDIR)/scan_match_11.o : $(SRCDIR)/scan_match_11.cpp
 	g++ $(CXXFLAGS) -c $(EIGEN) $< -o $@
@@ -98,7 +82,10 @@ $(BUILDDIR)/slam_posegraph.o : $(SRCDIR)/slam_posegraph.cpp $(BUILDDIR)/scan_mat
 	g++ $(CXXFLAGS) -c $(EIGEN) $< -o $@
 
 $(BUILDDIR)/SerialWriter.o : $(SRCDIR)/SerialWriter.cpp
-	g++ $(CXXFLAGS) -c $(ASIO) $< -o $@ -lpthread
+	g++ $(CXXFLAGS) -c $(ASIO) $< -o $@ 
+
+$(BUILDDIR)/MotorController.o : $(SRCDIR)/MotorController.cpp
+	g++ $(CXXFLAGS) -c $(ASIO) $< -o $@
 
 $(BUILDDIR)/TelemetryServer.o : $(SRCDIR)/TelemetryServer.cpp
-	g++ $(CXXFLAGS) -c $(ASIO) $(EIGEN) $< -o $@ -lpthread
+	g++ $(CXXFLAGS) -c $(ASIO) $(EIGEN) $< -o $@ 

@@ -6,6 +6,7 @@
 #include <iostream>
 #include <Eigen/Dense>
 #include "../include/scan_match_11.h"
+#include "../include/timer.h"
 
 using namespace std;
 using namespace Eigen;
@@ -416,13 +417,11 @@ void NDTScanMatcher::ndtScanMatchHP(const Scan& scan2, const Scan& scan1,
 	// auto duration = std::chrono::duration_cast<std::chrono::milliseconds>(end - start);
 	// printf("NeldMTime: "); printf("%d",duration.count());printf(" ms\n");
 
-	auto start = std::chrono::high_resolution_clock::now();
+	Timer timer;
 	phi = goldenSectionAngleSearch(scan1, ndtGrid, gridSize, 0.0, 0.0, phiInit-0.5,  phiInit+0.5,0.01);
+	timer.mark("goldensection");
 
 	cout << "GS result: " << phi << "\n";
-	auto end = std::chrono::high_resolution_clock::now();
-	auto duration = std::chrono::duration_cast<std::chrono::milliseconds>(end - start);
-	printf("goldensection: "); printf("%d",duration.count());printf(" ms\n");
 	Matrix3d tempSquare = Matrix3d::Zero();
 	double prevScore2 = 0.0;
 	Matrix3d Amat = Matrix3d::Zero();

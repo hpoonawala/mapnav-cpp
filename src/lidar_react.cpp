@@ -79,7 +79,6 @@ static inline void delay(sl_word_size_t ms){
 #include <exception>
 
 // Watchdog timer
-#include <pthread.h>
 #include <time.h>
 #include <atomic>
 
