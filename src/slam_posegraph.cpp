@@ -165,7 +165,7 @@ ScanMatchCache::CacheValue PoseGraph::cached_scan_match(
     this->matcher.ndtScanMatchHP(
         scan2, scan1, grid_size, result_p2d,hessian, max_iters, 1e-6,
         init_params[0], init_params[1], init_params[2],
-         new bool(false)
+         false
     );
     
     ScanMatchCache::CacheValue result;
@@ -280,16 +280,15 @@ double PoseGraph::get_grid_size() const {
 }
 
 // Main mapping function implementation
-std::pair<std::vector<Pose>, std::vector<int>> mapping_optimized(
+std::pair<std::vector<Pose>, std::vector<int>> PoseGraph::optimize(
     const std::vector<Eigen::MatrixXd>& scanlist,
     const std::vector<Pose>& odom_poses,
-    PoseGraph& posegraph,
     int ind_interval) {
     
     int n = scanlist.size();
     
-    auto current_edges = posegraph.build_graph_edges(n, 0, ind_interval);
-    auto current_nodes = posegraph.get_nodes_from_edges(current_edges, n, ind_interval);
+    auto current_edges = build_graph_edges(n, 0, ind_interval);
+    auto current_nodes = get_nodes_from_edges(current_edges, n, ind_interval);
     
     std::set<std::pair<int, int>> current_edge_set;
     for (const auto& edge : current_edges) {
@@ -299,7 +298,7 @@ std::pair<std::vector<Pose>, std::vector<int>> mapping_optimized(
     }
     
     std::vector<std::vector<int>> new_edges;
-    auto& prev_graph = posegraph.get_previous_graph();
+    auto& prev_graph = get_previous_graph();
     
     if (prev_graph.empty()) {
         new_edges = current_edges;
@@ -321,7 +320,7 @@ std::pair<std::vector<Pose>, std::vector<int>> mapping_optimized(
                   << " new edges out of " << current_edges.size() << " total" << std::endl;
     }
     
-    auto& previous_results = posegraph.get_previous_results();
+    auto& previous_results = get_previous_results();
     
     for (const auto& edge : new_edges) {
         int ind_one = edge[0];
@@ -330,9 +329,9 @@ std::pair<std::vector<Pose>, std::vector<int>> mapping_optimized(
         Eigen::Vector3d rel_trans = relative_transform(odom_poses[ind_one], odom_poses[ind_two]);
         Eigen::Vector3d inv_trans = invert_transform(rel_trans);
         
-        auto cached_result = posegraph.cached_scan_match(
+        auto cached_result = cached_scan_match(
             scanlist[ind_one], scanlist[ind_two],
-            posegraph.get_grid_size(), inv_trans, 500
+            get_grid_size(), inv_trans, 500
         );
         
         Eigen::Vector3d manual_pose(
@@ -375,12 +374,12 @@ std::pair<std::vector<Pose>, std::vector<int>> mapping_optimized(
     Eigen::VectorXd b_vec;
     std::map<int, int> vertex_dict;
     
-    posegraph.build_sparse_system(current_edges, current_nodes, relative_poses,
+    build_sparse_system(current_edges, current_nodes, relative_poses,
                                    A_mat, b_vec, vertex_dict);
     
-    Eigen::VectorXd solution = posegraph.solve_pose_graph(A_mat, b_vec);
+    Eigen::VectorXd solution = solve_pose_graph(A_mat, b_vec);
     
-    auto updated_poses = posegraph.update_poses_efficiently(
+    auto updated_poses = update_poses_efficiently(
         odom_poses, solution, current_nodes, vertex_dict
     );
     

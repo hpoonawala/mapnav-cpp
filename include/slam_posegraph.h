@@ -126,6 +126,11 @@ public:
     std::map<std::pair<int, int>, Eigen::Vector3d>& get_previous_results();
     double get_grid_size() const;
     
+	// Main mapping function
+	std::pair<std::vector<Pose>, std::vector<int>> optimize(
+		const std::vector<Eigen::MatrixXd>& ,
+		const std::vector<Pose>& ,
+		int);
 private:
 	NDTScanMatcher matcher;
     ScanMatchCache cache_;
@@ -135,11 +140,5 @@ private:
     double grid_size_;
 };
 
-// Main mapping function
-std::pair<std::vector<Pose>, std::vector<int>> mapping_optimized(
-    const std::vector<Eigen::MatrixXd>& scanlist,
-    const std::vector<Pose>& odom_poses,
-    PoseGraph& posegraph,
-    int ind_interval = 10);
 
 #endif // SLAM_POSEGRAPH_H

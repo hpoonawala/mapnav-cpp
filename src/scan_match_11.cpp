@@ -397,7 +397,7 @@ void NDTScanMatcher::ndtScanMatchHP(const Scan& scan2, const Scan& scan1,
 				   int maxIters = 60, double tol = 1e-6,
 				   double txInit = 0.0, double tyInit = 0.0,
 				   double phiInit = 0.0, bool debug = false) {
-	std::cout << "Initial angle: "  << phiInit << "\n";
+	/* if (debug) std::cout << "Initial angle: "  << phiInit << "\n"; */
 
 	// Compute NDT grid for the reference scan
 	NDTGrid ndtGrid = computeNDTGrid(scan2, gridSize);
@@ -417,11 +417,11 @@ void NDTScanMatcher::ndtScanMatchHP(const Scan& scan2, const Scan& scan1,
 	// auto duration = std::chrono::duration_cast<std::chrono::milliseconds>(end - start);
 	// printf("NeldMTime: "); printf("%d",duration.count());printf(" ms\n");
 
-	Timer timer;
+	/* if (debug) Timer timer; */
 	phi = goldenSectionAngleSearch(scan1, ndtGrid, gridSize, 0.0, 0.0, phiInit-0.5,  phiInit+0.5,0.01);
-	timer.mark("goldensection");
+	/* if (debug) timer.mark("goldensection"); */
 
-	cout << "GS result: " << phi << "\n";
+	/* if (debug) cout << "GS result: " << phi << "\n"; */
 	Matrix3d tempSquare = Matrix3d::Zero();
 	double prevScore2 = 0.0;
 	Matrix3d Amat = Matrix3d::Zero();

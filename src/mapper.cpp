@@ -9,11 +9,13 @@
 #include "../include/scan_match_11.h"
 #include "../include/OccupancyGrid.h"
 #include "../include/slam_posegraph.h"
+#include "../include/frameHistory.h"
+#include "../include/slamThread.h"
 #include "../include/mapper.h"
 #include "../include/timer.h"
 
 Mapper::Mapper() :	matcher {},
-					posegraph {matcher, Pose(0.0,0.0,0.0), 0.85},
+					slam_thread {matcher, Pose(0.0,0.0,0.0), 0.85,2},
 					grid {OccupancyGrid(10.0,10.0,0.02)},
 					gridsize{0.85},
 					curr_pose{Pose2D(0.0,0.0,0.0)}
@@ -39,8 +41,8 @@ void Mapper::update_scans(Scan& scan_polar) {
 		Matrix3d hessian;
 		Timer timer;
 		matcher.ndtScanMatchHP(prev_scan, scan, gridsize, result, hessian, 60, 1e-6, 0.0, 0.0, 0.0, false);
-		timer.mark("scan match"); timer.reset();
-		move_pose_local(curr_pose, result);
+		timer.mark("scan match: "); timer.reset();
+		move_pose_local(curr_pose, result); // propagate pose in memory by scan match result
 		frame_history.append({scan, Pose(curr_pose.x_, curr_pose.y_, curr_pose.theta_)});
 	}
 }
@@ -53,48 +55,6 @@ void Mapper::update_map(Scan& scan, Pose& pose) {
 	p.theta_ = pose[2];
 	Scan world_scan = matcher.transformScanToPose(scan, p);
 	grid.updateWithScan(world_scan, pose);
-}
-
-void Mapper::slam() {
-	std::cout << "\nRunning pose graph optimization..." << std::endl;
-
-	std::vector<Frame> frames = frame_history.snapshot();
-
-	std::vector<Scan> scans;
-	std::vector<Pose> poses;
-	scans.reserve(frames.size());
-	poses.reserve(frames.size());
-	for (size_t i = 0; i < frames.size(); i++) {
-		scans.push_back(frames[i].scan);
-		poses.push_back(frames[i].pose);
-	}
-
-	int ind_interval = 2;
-	auto result = mapping_optimized(scans, poses, posegraph, ind_interval);
-	std::vector<Pose> corrected_poses = result.first;
-	std::vector<int> nodes = result.second;
-
-	std::cout << "Optimization complete! Optimized " << nodes.size() << " nodes" << std::endl;
-
-	// Write corrected node poses back into frame_history
-	std::vector<Pose> node_poses;
-	node_poses.reserve(nodes.size());
-	for (int k : nodes) node_poses.push_back(corrected_poses[k]);
-	frame_history.update_poses(nodes, node_poses);
-
-	// Rebuild occupancy grid from corrected node frames
-	grid.clear();
-	for (int k : nodes) {
-		update_map(scans[k], corrected_poses[k]);
-	}
-
-	// Anchor curr_pose to the last corrected pose
-	curr_pose.x_     = corrected_poses.back().x;
-	curr_pose.y_     = corrected_poses.back().y;
-	curr_pose.theta_ = corrected_poses.back().theta;
-
-	grid.writeGridToFile("occupancy_grid_slam.txt", 3.0, 1.5);
-	grid.writePGMFile("occupancy_grid_slam.pgm");
 }
 
 bool Mapper::plan_path(const Pose2D& goal) {

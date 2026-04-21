@@ -72,6 +72,7 @@ using namespace Eigen;
 		LidarScanner::LidarScanner(const char *opt_channel_param_first, sl_u32 opt_channel_param_second) : drv {*createLidarDriver()}, _channel {(*createSerialPortChannel(opt_channel_param_first, opt_channel_param_second))}, scan_curr_loader {Scan(8152,2)}  {};
 		// Destructor
 		LidarScanner::~LidarScanner() { 
+			drv->stop();
 			delay(20);
 			drv->setMotorSpeed(0);
 			delete drv;

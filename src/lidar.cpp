@@ -130,17 +130,24 @@ int main(int argc, const char * argv[]) {
 	MotorController motor(MOTOR_PORT); // for sending commands to the motors 
 	DDRCappController controller({}, 0.5, 100.0, 60.0); // compute control from pose and scan
 	Timer timer; // to time events. .reset() and .mark(string)
+	Timer slam_timer; // to time events. .reset() and .mark(string)
+	int n_frames =0;
 	for(int k=0;k<loop_iters;k++){
-		printf("Loop: %d / %d\n",k,loop_iters); 
+		n_frames = mapper.frame_history.size();
 
 		// Get Scan 
-		if (!lidar.getScan(scan_curr)) {cout <<"delay 100ms\n";delay(100); continue;} // but will not run SLAM
+		if (!lidar.getScan(scan_curr)) {  // no new scan
+			/* cout <<"delay 10ms\n"; */ 
+			delay(10); 
+			continue;
+		} // but will not run SLAM
+		printf("Loop: %d / %d scans: %d\n",k,loop_iters,n_frames); 
 		// Update pose by scan matching
 		mapper.update_scans(scan_curr);
 		std::cout << "Current pose according to mapper:" << mapper.curr_pose << "\n";
 
 		// Publish pose to telemetry clients occasionally
-		if (k % 5 ==0) {
+		if (n_frames % 5 ==0) {
 			telemetry.publishPose(mapper.curr_pose, k);
 		}
 		telemetry.tick(); // process telemetry
@@ -169,10 +176,21 @@ int main(int argc, const char * argv[]) {
 		}
 
 		timer.mark("initial NM Time elapsed: "); timer.reset();
-		// Check for SLAM point
-		if (k % 10 == 0 && k > 5) {
-			motor.stop();
-			mapper.slam();
+		// try to see ifSLAM is done:
+		bool slam_collect_res = mapper.slam_thread.tryCollect(mapper.frame_history);
+		cout << "slam_collect_res: " << slam_collect_res << "\n";
+		if (slam_collect_res){
+			slam_timer.mark("SLAM time elapsed: ");
+			// recompute map, update position, plan a path, put it in controller, save map, push telelmetry
+			/* grid.clear(); */
+			/* for (int k : nodes) { */
+			/* 	update_map(scans[k], corrected_poses[k]); */
+			/* } */
+
+			/* // Anchor curr_pose to the last corrected pose */
+			/* curr_pose.x_     = corrected_poses.back().x; */
+			/* curr_pose.y_     = corrected_poses.back().y; */
+			/* curr_pose.theta_ = corrected_poses.back().theta; */
 			//mapper.plan_path(navigation_goal);
 			//if (!mapper.path.empty()) {
 			//	controller.setPath(mapper.path);
@@ -181,14 +199,22 @@ int main(int argc, const char * argv[]) {
 			//mapper.grid.writePGMFile("occupancy_grid_slam_" + std::to_string(k) + ".pgm");
 
 			// Publish map and path to telemetry clients
-			telemetry.publishMap(mapper.grid);
-			telemetry.tick();
+			/* telemetry.publishMap(mapper.grid); */
+			/* telemetry.tick(); */
+			/* grid.writeGridToFile("occupancy_grid_slam.txt", 3.0, 1.5); */
+			/* grid.writePGMFile("occupancy_grid_slam.pgm"); */
 			//telemetry.publishPath(mapper.path);
-			timer.mark("SLAM elapsed: "); timer.reset();
+		}
+		// Check for SLAM point
+		if (n_frames % 10 == 0 && n_frames > 5) {
+			bool slam_launch_res = mapper.slam_thread.tryLaunch(mapper.frame_history);
+			cout << "slam_launch_res: " << slam_launch_res << "\n";
+			if(slam_launch_res) slam_timer.reset();
 		}
 
 		// Send out control based on current pose
-		if (k > 10 && !navigation_paused) {
+		// No motion until we get one slam run
+		if (n_frames > 10 && !navigation_paused) {
 			std::pair<int,int> velocities = controller.computeControl(mapper.curr_pose, scan_curr);
 			std::cout << "velocities:" << velocities.first << " " << velocities.second << "\n";
 			motor.send(velocities.first,velocities.second);
@@ -202,10 +228,12 @@ int main(int argc, const char * argv[]) {
 	// Stop telemetry server
 	telemetry.stop();
 
+	mapper.slam_thread.wait();
 
-	// Run final slam 
-	mapper.slam();
-	mapper.plan_path(navigation_goal);
+
+	// TODO: Run final slam 
+	/* mapper.slam(); */
+	/* mapper.plan_path(navigation_goal); */
 	//mapper.grid.writeGridToFile("occupancy_grid_slam.txt", 3.0, 1.5);
 	mapper.grid.writePGMFile("occupancy_grid_slam_final.pgm");
 	return 0;
