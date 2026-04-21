@@ -15,7 +15,7 @@
 #include "../include/timer.h"
 
 Mapper::Mapper() :	matcher {},
-					slam_thread {matcher, Pose2D(0.0,0.0,0.0), 0.85,2},
+					slam_thread {matcher, Pose2D(0.0,0.0,0.0), 0.85,2,OccupancyGrid(10.0,10.0,0.02)},
 					grid {OccupancyGrid(10.0,10.0,0.02)},
 					gridsize{0.85},
 					curr_pose{Pose2D(0.0,0.0,0.0)}

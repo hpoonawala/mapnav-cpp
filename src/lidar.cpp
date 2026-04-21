@@ -141,11 +141,11 @@ int main(int argc, const char * argv[]) {
 			delay(10); 
 			continue;
 		} // but will not run SLAM
+
 		printf("Loop: %d / %d scans: %d\n",k,loop_iters,n_frames); 
-		// Update pose by scan matching
 		mapper.update_scans(scan_curr);
 		std::cout << "Current pose according to mapper:" << mapper.curr_pose << "\n";
-
+		timer.mark("initial NM Time elapsed: "); timer.reset();
 		// Publish pose to telemetry clients occasionally
 		if (n_frames % 5 ==0) {
 			telemetry.publishPose(mapper.curr_pose, k);
@@ -175,39 +175,28 @@ int main(int argc, const char * argv[]) {
 			}
 		}
 
-		timer.mark("initial NM Time elapsed: "); timer.reset();
-		// try to see ifSLAM is done:
-		bool slam_collect_res = mapper.slam_thread.tryCollect(mapper.frame_history);
+		// try to see if SLAM is done:
+		// SLAM also updates grid and calculates a new path
+		bool slam_collect_res = mapper.slam_thread.tryCollect(mapper.frame_history, mapper.grid, mapper.curr_pose,mapper.path);
 		cout << "slam_collect_res: " << slam_collect_res << "\n";
 		if (slam_collect_res){
 			slam_timer.mark("SLAM time elapsed: ");
-			// recompute map, update position, plan a path, put it in controller, save map, push telelmetry
-			/* grid.clear(); */
-			/* for (int k : nodes) { */
-			/* 	update_map(scans[k], corrected_poses[k]); */
-			/* } */
+			if (!mapper.path.empty()) {
+				controller.setPath(mapper.path);
+			}
 
-			/* // Anchor curr_pose to the last corrected pose */
-			/* curr_pose.x_     = corrected_poses.back().x; */
-			/* curr_pose.y_     = corrected_poses.back().y; */
-			/* curr_pose.theta_ = corrected_poses.back().theta; */
-			//mapper.plan_path(navigation_goal);
-			//if (!mapper.path.empty()) {
-			//	controller.setPath(mapper.path);
-			//}
-
-			//mapper.grid.writePGMFile("occupancy_grid_slam_" + std::to_string(k) + ".pgm");
+			mapper.grid.writePGMFile("occupancy_grid_slam_" + std::to_string(n_frames) + ".pgm");
 
 			// Publish map and path to telemetry clients
-			/* telemetry.publishMap(mapper.grid); */
-			/* telemetry.tick(); */
+			telemetry.publishMap(mapper.grid);
+			telemetry.tick();
 			/* grid.writeGridToFile("occupancy_grid_slam.txt", 3.0, 1.5); */
 			/* grid.writePGMFile("occupancy_grid_slam.pgm"); */
-			//telemetry.publishPath(mapper.path);
+			telemetry.publishPath(mapper.path);
 		}
 		// Check for SLAM point
 		if (n_frames % 10 == 0 && n_frames > 5) {
-			bool slam_launch_res = mapper.slam_thread.tryLaunch(mapper.frame_history);
+			bool slam_launch_res = mapper.slam_thread.tryLaunch(mapper.frame_history, navigation_goal);
 			cout << "slam_launch_res: " << slam_launch_res << "\n";
 			if(slam_launch_res) slam_timer.reset();
 		}

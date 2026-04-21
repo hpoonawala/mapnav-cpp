@@ -3,20 +3,22 @@
 #include <stdlib.h>
 #include <vector>
 #include <future>
+#include <mutex>
 #include "../include/scan_match_11.h"
 #include "../include/pose.h"
 #include "OccupancyGrid.h"
 #include "slam_posegraph.h"
 #include "frameHistory.h"
  
+
 class SlamThread {
   public:
-      SlamThread(NDTScanMatcher&, Pose2D, double, int);
+      SlamThread(NDTScanMatcher&, Pose2D, double, int, OccupancyGrid);
 	  ~SlamThread();
       // Called from Thread 2. Takes snapshot, launches if idle. Returns false if busy.
-      bool tryLaunch(FrameHistory& frame_history);
+      bool tryLaunch(FrameHistory&,const Pose2D&);
       // Called from Thread 2. Non-blocking poll. Returns true if results are fresh.
-      bool tryCollect(FrameHistory& frame_history);
+      bool tryCollect(FrameHistory&, OccupancyGrid&, Pose2D&, vector<pair<double,double>>&);
       void wait(); // for shutdown — blocks until any in-flight job finishes
   private:
       PoseGraph posegraph_;
@@ -26,5 +28,7 @@ class SlamThread {
       std::vector<Pose2D> corrected_poses_;
       std::vector<int>  nodes_;
       std::vector<Frame> snapshot_;  // held so tryCollect has the scans
-  };
+	  OccupancyGrid new_grid_;
+	  std::vector<std::pair<double,double>> new_path_;
+};
 #endif
