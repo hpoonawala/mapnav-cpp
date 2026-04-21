@@ -28,7 +28,7 @@ class Mapper {
 		Mapper();
 
 		void update_scans(Scan&);
-		void update_map(Scan&, Pose&);
+		void update_map(Scan&, Pose2D&);
 		bool plan_path(const Pose2D& goal);
 };
 #endif

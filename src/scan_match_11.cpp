@@ -7,24 +7,11 @@
 #include <Eigen/Dense>
 #include "../include/scan_match_11.h"
 #include "../include/timer.h"
+#include "../include/frameHistory.h"
+#include "../include/pose.h"
 
 using namespace std;
 using namespace Eigen;
-
-// Scan match in place to avoid reallocations
-void NDTScanMatcher::transformScanInPlace(Scan& output, const Scan& scan, 
-                                          double tx, double ty, double phi) {
-    double c = cos(phi);
-    double s = sin(phi);
-    
-    for (int i = 0; i < scan.rows(); ++i) {
-        double x = scan(i, 0);
-        double y = scan(i, 1);
-        output(i, 0) = c*x - s*y + tx;
-        output(i, 1) = s*x + c*y + ty;
-    }
-}
-
 
 // NelderMead
 std::vector<std::vector<double>> NDTScanMatcher::neldermead(
@@ -260,22 +247,6 @@ NDTGrid NDTScanMatcher::computeNDTGrid(const Scan& scan, double gridSize) {
 	return ndtGrid;
 }
 
-Scan NDTScanMatcher::transformScan(const Scan& scan, double tx, double ty, double phi) {
-	Matrix2d rotation;
-	rotation << cos(phi), -sin(phi),
-			   sin(phi),  cos(phi);
-	
-	Vector2d translation(tx, ty);
-	
-	Scan transformed = (rotation * scan.transpose()).transpose();
-	transformed.rowwise() += translation.transpose();
-	
-	return transformed;
-}
-
-Scan NDTScanMatcher::transformScanToPose(const Scan& scan, const Pose2D& pose) {
-	return transformScan(scan, pose.x_, pose.y_, pose.theta_);
-}
 
 double NDTScanMatcher::computeNDTScore(const Scan& scan, const NDTGrid& ndtGrid,
                                        double invGridSize, MatrixXi& gridIndices) {

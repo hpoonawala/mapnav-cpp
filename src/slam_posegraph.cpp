@@ -4,19 +4,10 @@
 
 #include "../include/slam_posegraph.h"
 #include "../include/scan_match_11.h"
+#include "../include/pose.h"
 #include <stdexcept>
 #include <iostream>
 
-// Pose implementation
-Pose::Pose() : x(0.0), y(0.0), theta(0.0) {}
-
-Pose::Pose(double x_, double y_, double theta_) : x(x_), y(y_), theta(theta_) {}
-
-double Pose::operator[](int idx) const {
-    if (idx == 0) return x;
-    if (idx == 1) return y;
-    return theta;
-}
 
 // Helper functions implementation
 Eigen::Vector3d invert_transform(const Eigen::Vector3d& pose) {
@@ -36,12 +27,12 @@ Eigen::Vector2d rotated_relative_position(double dx, double dy, double theta) {
     return Eigen::Vector2d(dxR, dyR);
 }
 
-Eigen::Vector3d relative_transform(const Pose& from_pose, const Pose& to_pose) {
-    double dx = (to_pose.x - from_pose.x) * std::cos(from_pose.theta) + 
-                (to_pose.y - from_pose.y) * std::sin(from_pose.theta);
-    double dy = -(to_pose.x - from_pose.x) * std::sin(from_pose.theta) + 
-                (to_pose.y - from_pose.y) * std::cos(from_pose.theta);
-    double dt = to_pose.theta - from_pose.theta;
+Eigen::Vector3d relative_transform(const Pose2D& from_pose, const Pose2D& to_pose) {
+    double dx = (to_pose.x_ - from_pose.x_) * std::cos(from_pose.theta_) + 
+                (to_pose.y_ - from_pose.y_) * std::sin(from_pose.theta_);
+    double dy = -(to_pose.x_ - from_pose.x_) * std::sin(from_pose.theta_) + 
+                (to_pose.y_ - from_pose.y_) * std::cos(from_pose.theta_);
+    double dt = to_pose.theta_ - from_pose.theta_;
     return Eigen::Vector3d(dx, dy, dt);
 }
 
@@ -105,7 +96,7 @@ void ScanMatchCache::put(const Eigen::MatrixXd& scan1, const Eigen::MatrixXd& sc
 }
 
 // PoseGraph implementation
-PoseGraph::PoseGraph(NDTScanMatcher& matcher, const Pose& initial_pose, double grid_size)
+PoseGraph::PoseGraph(NDTScanMatcher& matcher, const Pose2D& initial_pose, double grid_size)
     : matcher (matcher), initial_pose_(initial_pose), grid_size_(grid_size) {}
 
 std::vector<std::vector<int>> PoseGraph::build_graph_edges(int n, int first_ind, int ind_interval) {
@@ -222,9 +213,9 @@ void PoseGraph::build_sparse_system(
     triplets.push_back(Eigen::Triplet<double>(anchor_start + 1, 1, 1.0));
     triplets.push_back(Eigen::Triplet<double>(anchor_start + 2, 2, 1.0));
     
-    b_vec[anchor_start] = initial_pose_.x;
-    b_vec[anchor_start + 1] = initial_pose_.y;
-    b_vec[anchor_start + 2] = initial_pose_.theta;
+    b_vec[anchor_start] = initial_pose_.x_;
+    b_vec[anchor_start + 1] = initial_pose_.y_;
+    b_vec[anchor_start + 2] = initial_pose_.theta_;
     
     A_mat.setFromTriplets(triplets.begin(), triplets.end());
 }
@@ -249,19 +240,19 @@ Eigen::VectorXd PoseGraph::solve_pose_graph(const Eigen::SparseMatrix<double>& A
     return solver.solve(Atb);
 }
 
-std::vector<Pose> PoseGraph::update_poses_efficiently(
-    const std::vector<Pose>& odom_poses,
+std::vector<Pose2D> PoseGraph::update_poses_efficiently(
+    const std::vector<Pose2D>& odom_poses,
     const Eigen::VectorXd& solution,
     const std::vector<int>& nodes,
     const std::map<int, int>& vertex_dict) {
     
-    std::vector<Pose> updated_poses = odom_poses;
+    std::vector<Pose2D> updated_poses = odom_poses;
     
     for (int node : nodes) {
         int idx = vertex_dict.at(node);
-        updated_poses[node].x = solution[3 * idx];
-        updated_poses[node].y = solution[3 * idx + 1];
-        updated_poses[node].theta = solution[3 * idx + 2];
+        updated_poses[node].x_ = solution[3 * idx];
+        updated_poses[node].y_ = solution[3 * idx + 1];
+        updated_poses[node].theta_ = solution[3 * idx + 2];
     }
     
     return updated_poses;
@@ -280,9 +271,9 @@ double PoseGraph::get_grid_size() const {
 }
 
 // Main mapping function implementation
-std::pair<std::vector<Pose>, std::vector<int>> PoseGraph::optimize(
+std::pair<std::vector<Pose2D>, std::vector<int>> PoseGraph::optimize(
     const std::vector<Eigen::MatrixXd>& scanlist,
-    const std::vector<Pose>& odom_poses,
+    const std::vector<Pose2D>& odom_poses,
     int ind_interval) {
     
     int n = scanlist.size();
@@ -342,7 +333,7 @@ std::pair<std::vector<Pose>, std::vector<int>> PoseGraph::optimize(
         
         Eigen::Vector3d inv_pose = invert_transform(manual_pose);
         Eigen::Vector2d rotated = rotated_relative_position(
-            inv_pose[0], inv_pose[1], odom_poses[ind_one].theta
+            inv_pose[0], inv_pose[1], odom_poses[ind_one].theta_
         );
         
         int a = std::min(ind_one, ind_two);

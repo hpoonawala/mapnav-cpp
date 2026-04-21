@@ -118,7 +118,7 @@ void OccupancyGrid::markFreeSpaceVectorized(double x1, double y1, double x2, dou
 
 
 // Update occupancy grid with LiDAR scan data
-void OccupancyGrid::updateWithScan(const Scan& scan, const Pose& pose) {
+void OccupancyGrid::updateWithScan(const Scan& scan, const Pose2D& pose) {
     
     // Placeholder: Insert scan matching function call here to refine robot pose if needed
     // auto refined_pose = scanMatchingFunction(lidar_x, lidar_y, robot_x, robot_y, robot_theta);

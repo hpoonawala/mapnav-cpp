@@ -15,7 +15,7 @@
 #include "../include/timer.h"
 
 Mapper::Mapper() :	matcher {},
-					slam_thread {matcher, Pose(0.0,0.0,0.0), 0.85,2},
+					slam_thread {matcher, Pose2D(0.0,0.0,0.0), 0.85,2},
 					grid {OccupancyGrid(10.0,10.0,0.02)},
 					gridsize{0.85},
 					curr_pose{Pose2D(0.0,0.0,0.0)}
@@ -34,7 +34,7 @@ void Mapper::update_scans(Scan& scan_polar) {
 	Scan scan = polarToCartesian(scan_polar, scan_polar.rows());
 	int n = frame_history.size();
 	if (n == 0) {
-		frame_history.append({scan, Pose(curr_pose.x_, curr_pose.y_, curr_pose.theta_)});
+		frame_history.append({scan, Pose2D(curr_pose.x_, curr_pose.y_, curr_pose.theta_)});
 	} else {
 		Scan prev_scan = frame_history.last_scan();
 		Pose2D result;
@@ -43,17 +43,17 @@ void Mapper::update_scans(Scan& scan_polar) {
 		matcher.ndtScanMatchHP(prev_scan, scan, gridsize, result, hessian, 60, 1e-6, 0.0, 0.0, 0.0, false);
 		timer.mark("scan match: "); timer.reset();
 		move_pose_local(curr_pose, result); // propagate pose in memory by scan match result
-		frame_history.append({scan, Pose(curr_pose.x_, curr_pose.y_, curr_pose.theta_)});
+		frame_history.append({scan, Pose2D(curr_pose.x_, curr_pose.y_, curr_pose.theta_)});
 	}
 }
 
 // Takes a body-frame scan and world-frame pose, updates the occupancy grid
-void Mapper::update_map(Scan& scan, Pose& pose) {
+void Mapper::update_map(Scan& scan, Pose2D& pose) {
 	Pose2D p;
 	p.x_ = pose[0];
 	p.y_ = pose[1];
 	p.theta_ = pose[2];
-	Scan world_scan = matcher.transformScanToPose(scan, p);
+	Scan world_scan = transformScanToPose(scan, p);
 	grid.updateWithScan(world_scan, pose);
 }
 

@@ -86,7 +86,7 @@ public:
                        const std::vector<double>& lidar_y, 
                        double robot_x, double robot_y, double robot_theta);
     
-    void updateWithScan(const Scan& scan, const Pose& pose);
+    void updateWithScan(const Scan& scan, const Pose2D& pose);
     /**
      * @brief Mark free space between two points using ray tracing
      * @param x1 Start point x coordinate

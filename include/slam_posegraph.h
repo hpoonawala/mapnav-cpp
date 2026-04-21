@@ -39,21 +39,10 @@ namespace scan_match {
     );
 }
 
-// Pose structure
-struct Pose {
-    double x;
-    double y;
-    double theta;
-    
-    Pose();
-    Pose(double x_, double y_, double theta_);
-    double operator[](int idx) const;
-};
-
 // Helper function declarations
 Eigen::Vector3d invert_transform(const Eigen::Vector3d& pose);
 Eigen::Vector2d rotated_relative_position(double dx, double dy, double theta);
-Eigen::Vector3d relative_transform(const Pose& from_pose, const Pose& to_pose);
+Eigen::Vector3d relative_transform(const Pose2D& from_pose, const Pose2D& to_pose);
 std::string hash_scans(const Eigen::MatrixXd& scan1, const Eigen::MatrixXd& scan2);
 
 // Scan match cache
@@ -91,7 +80,7 @@ private:
 // Pose graph class
 class PoseGraph {
 public:
-    PoseGraph(NDTScanMatcher& matcher, const Pose& initial_pose = Pose(), double grid_size = 2.0);
+    PoseGraph(NDTScanMatcher& matcher, const Pose2D& initial_pose = Pose2D(), double grid_size = 2.0);
     
     std::vector<std::vector<int>> build_graph_edges(int n, int first_ind = 0, int ind_interval = 10);
     
@@ -116,8 +105,8 @@ public:
     Eigen::VectorXd solve_pose_graph(const Eigen::SparseMatrix<double>& A_mat,
                                      const Eigen::VectorXd& b_vec);
     
-    std::vector<Pose> update_poses_efficiently(
-        const std::vector<Pose>& odom_poses,
+    std::vector<Pose2D> update_poses_efficiently(
+        const std::vector<Pose2D>& odom_poses,
         const Eigen::VectorXd& solution,
         const std::vector<int>& nodes,
         const std::map<int, int>& vertex_dict);
@@ -127,16 +116,16 @@ public:
     double get_grid_size() const;
     
 	// Main mapping function
-	std::pair<std::vector<Pose>, std::vector<int>> optimize(
+	std::pair<std::vector<Pose2D>, std::vector<int>> optimize(
 		const std::vector<Eigen::MatrixXd>& ,
-		const std::vector<Pose>& ,
+		const std::vector<Pose2D>& ,
 		int);
 private:
 	NDTScanMatcher matcher;
     ScanMatchCache cache_;
     std::vector<std::vector<int>> previous_graph_;
     std::map<std::pair<int, int>, Eigen::Vector3d> previous_results_;
-    Pose initial_pose_;
+    Pose2D initial_pose_;
     double grid_size_;
 };
 

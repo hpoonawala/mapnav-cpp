@@ -11,7 +11,7 @@
  
 class SlamThread {
   public:
-      SlamThread(NDTScanMatcher&, Pose, double, int);
+      SlamThread(NDTScanMatcher&, Pose2D, double, int);
 	  ~SlamThread();
       // Called from Thread 2. Takes snapshot, launches if idle. Returns false if busy.
       bool tryLaunch(FrameHistory& frame_history);
@@ -23,7 +23,7 @@ class SlamThread {
       int ind_interval_;
       std::future<void> future_;
       // Stored by the async job, read by tryCollect
-      std::vector<Pose> corrected_poses_;
+      std::vector<Pose2D> corrected_poses_;
       std::vector<int>  nodes_;
       std::vector<Frame> snapshot_;  // held so tryCollect has the scans
   };

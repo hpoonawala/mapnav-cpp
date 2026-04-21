@@ -5,7 +5,7 @@
 #include <unordered_map>
 #include <cstdint>
 #include <Eigen/Dense>
-#include "pose.h"
+#include "../include/pose.h"
 using namespace std;
 using namespace Eigen;
 
@@ -81,8 +81,6 @@ public:
 
     NDTGrid computeNDTGrid(const Scan&, double);
     
-    Scan transformScan(const Scan&, double, double, double);    
-    Scan transformScanToPose(const Scan&, const Pose2D&);     
     double computeNDTScore(const Scan&, const NDTGrid&, double invGridSize, MatrixXi& gridIndices);    
 private:
     double getNewtonData(Matrix3d&, Vector3d&, double,double, double,
@@ -95,8 +93,6 @@ public:
 		    int , double , 
 		    double , double , 
 		    double , bool );
-    void transformScanInPlace(Scan&, const Scan&,
-		    double, double, double);
 
     // Golden section search for optimal angle (faster than Nelder-Mead for 1D)
     double goldenSectionAngleSearch(
