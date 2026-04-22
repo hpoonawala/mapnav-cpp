@@ -17,7 +17,7 @@
 void LidarThread::run(){
     Scan scan_curr;
 	int n_samples=0;
-    VectorXi quality(8152);
+	Eigen::VectorXi quality(8152);
 	while(!shutdown_){
 		auto result = scanner.capture(scan_curr, n_samples, quality);
         if (result == SL_RESULT_OPERATION_TIMEOUT) continue;

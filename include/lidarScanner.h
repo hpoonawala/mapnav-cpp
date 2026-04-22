@@ -7,15 +7,12 @@
 #include <sstream>
 #include <vector>
 #include <unistd.h>
-using namespace sl;
-using namespace std;
-using namespace Eigen;
-typedef MatrixXd Scan;  // Nx2 matrix where each row is (x,y)
+typedef Eigen::MatrixXd Scan;  // Nx2 matrix where each row is (x,y)
 class LidarScanner{
 	private:
-		IChannel* _channel;
+		sl::IChannel* _channel;
 		Scan scan_curr_loader;  // 100 points
-		ILidarDriver *drv;
+		sl::ILidarDriver *drv;
 		// Disable copy constructor and assignment
 		LidarScanner(const LidarScanner&) = delete;
 		LidarScanner& operator=(const LidarScanner&) = delete;
@@ -24,7 +21,7 @@ class LidarScanner{
 		~LidarScanner();
 		void startScanning();
 		void stopScanning();
-		sl_result capture(Scan&, int&, VectorXi&);
+		sl_result capture(Scan&, int&, Eigen::VectorXi&);
 		bool initialize();
 
 };

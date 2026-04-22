@@ -23,7 +23,7 @@ class Mapper {
 		FrameHistory frame_history;
 		double gridsize;
 		Pose2D curr_pose;
-		vector<pair<double,double>> path;
+		std::vector<std::pair<double,double>> path;
 
 		Mapper();
 

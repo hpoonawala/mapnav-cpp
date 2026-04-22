@@ -22,11 +22,11 @@ inline void transformScanInPlace(Scan& output, const Scan& scan,
 }
 
 inline Scan transformScan(const Scan& scan, double tx, double ty, double phi) {
-	Matrix2d rotation;
+	Eigen::Matrix2d rotation;
 	rotation << cos(phi), -sin(phi),
 			   sin(phi),  cos(phi);
 	
-	Vector2d translation(tx, ty);
+	Eigen::Vector2d translation(tx, ty);
 	
 	Scan transformed = (rotation * scan.transpose()).transpose();
 	transformed.rowwise() += translation.transpose();

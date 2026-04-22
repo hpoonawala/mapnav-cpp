@@ -18,7 +18,7 @@ class SlamThread {
       // Called from Thread 2. Takes snapshot, launches if idle. Returns false if busy.
       bool tryLaunch(FrameHistory&,const Pose2D&);
       // Called from Thread 2. Non-blocking poll. Returns true if results are fresh.
-      bool tryCollect(FrameHistory&, OccupancyGrid&, Pose2D&, vector<pair<double,double>>&);
+      bool tryCollect(FrameHistory&, OccupancyGrid&, Pose2D&, std::vector<std::pair<double,double>>&);
       void wait(); // for shutdown — blocks until any in-flight job finishes
   private:
       PoseGraph posegraph_;

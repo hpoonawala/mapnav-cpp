@@ -95,3 +95,32 @@ $(BUILDDIR)/slamThread.o : $(SRCDIR)/slamThread.cpp
 
 clean:
 	rm -r build/
+
+# ---- Unit tests (requires: brew install googletest) ---------------------
+GTEST_PREFIX  := $(shell brew --prefix googletest 2>/dev/null || echo /usr)
+GTEST_INC     := -I$(GTEST_PREFIX)/include
+GTEST_LIBS    := -L$(GTEST_PREFIX)/lib -lgtest -lgtest_main
+# GoogleTest 1.17+ requires C++17; test objects are compiled separately so the
+# main codebase can stay on C++11.
+TESTCXXFLAGS  := -std=c++17 -O2
+
+TESTDIR    := tests
+TEST_INC   := $(EIGEN) -I$(INCDIR)
+POSE_DEPS  := $(BUILDDIR)/pose.o
+GRID_DEPS  := $(BUILDDIR)/OccupancyGrid.o $(BUILDDIR)/slam_posegraph.o \
+              $(BUILDDIR)/scan_match_11.o  $(BUILDDIR)/pose.o
+
+$(BUILDDIR)/test_pose: $(TESTDIR)/test_pose.cpp $(POSE_DEPS) | $(BUILDDIR)
+	g++ $(TESTCXXFLAGS) $(TEST_INC) $(GTEST_INC) $^ $(GTEST_LIBS) -lpthread -o $@
+
+$(BUILDDIR)/test_transforms: $(TESTDIR)/test_transforms.cpp $(POSE_DEPS) | $(BUILDDIR)
+	g++ $(TESTCXXFLAGS) $(TEST_INC) $(GTEST_INC) $^ $(GTEST_LIBS) -lpthread -o $@
+
+$(BUILDDIR)/test_grid: $(TESTDIR)/test_grid.cpp $(GRID_DEPS) | $(BUILDDIR)
+	g++ $(TESTCXXFLAGS) $(TEST_INC) $(GTEST_INC) $^ $(GTEST_LIBS) -lpthread -o $@
+
+.PHONY: test
+test: $(BUILDDIR)/test_pose $(BUILDDIR)/test_transforms $(BUILDDIR)/test_grid
+	$(BUILDDIR)/test_pose
+	$(BUILDDIR)/test_transforms
+	$(BUILDDIR)/test_grid

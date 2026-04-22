@@ -38,7 +38,7 @@ void Mapper::update_scans(Scan& scan_polar) {
 	} else {
 		Scan prev_scan = frame_history.last_scan();
 		Pose2D result;
-		Matrix3d hessian;
+		Eigen::Matrix3d hessian;
 		Timer timer;
 		matcher.ndtScanMatchHP(prev_scan, scan, gridsize, result, hessian, 60, 1e-6, 0.0, 0.0, 0.0, false);
 		timer.mark("scan match: "); timer.reset();

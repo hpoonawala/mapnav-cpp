@@ -1,13 +1,11 @@
-#ifndef ELEVEN_H // if <anyname> variable isn't defined...
-#define ELEVEN_H // ...define it now. Can't enter this if block twice!
+#ifndef MAPNAV_SCAN_MATCH_11_H // if <anyname> variable isn't defined...
+#define MAPNAV_SCAN_MATCH_11_H // ...define it now. Can't enter this if block twice!
 #include <algorithm>
 #include <vector>
 #include <unordered_map>
 #include <cstdint>
 #include <Eigen/Dense>
 #include "../include/pose.h"
-using namespace std;
-using namespace Eigen;
 
 // Use pose.h pose.cpp instead
 /* struct Pose2D { */
@@ -21,18 +19,18 @@ struct Point2D {
 };
 
 struct GaussianCell {
-    Vector2d mean;
-    Matrix2d covariance;
-    Matrix2d covInv;
+	Eigen::Vector2d mean;
+    Eigen::Matrix2d covariance;
+    Eigen::Matrix2d covInv;
     double det;
     double invdet;
-    GaussianCell() : mean(Vector2d::Zero()), covariance(Matrix2d::Zero()), covInv(Matrix2d::Zero()), det(1.0), invdet(1.0) {}
-    GaussianCell(const Vector2d& m, const Matrix2d& cov) : mean(m), covariance(cov), covInv((Eigen::Matrix2d() << cov(1,1), -cov(0,1), -cov(0,1),  cov(0,0)).finished()*1/cov.determinant()), det(cov.determinant()), invdet(1/cov.determinant()) {}
+    GaussianCell() : mean(Eigen::Vector2d::Zero()), covariance(Eigen::Matrix2d::Zero()), covInv(Eigen::Matrix2d::Zero()), det(1.0), invdet(1.0) {}
+    GaussianCell(const Eigen::Vector2d& m, const Eigen::Matrix2d& cov) : mean(m), covariance(cov), covInv((Eigen::Matrix2d() << cov(1,1), -cov(0,1), -cov(0,1),  cov(0,0)).finished()*1/cov.determinant()), det(cov.determinant()), invdet(1/cov.determinant()) {}
 
 };
 
 // Type definitions
-typedef MatrixXd Scan;  // Nx2 matrix where each row is (x,y)
+typedef Eigen::MatrixXd Scan;  // Nx2 matrix where each row is (x,y)
 
 struct NDTGrid {
     std::vector<GaussianCell> cells;
@@ -81,15 +79,15 @@ public:
 
     NDTGrid computeNDTGrid(const Scan&, double);
     
-    double computeNDTScore(const Scan&, const NDTGrid&, double invGridSize, MatrixXi& gridIndices);    
+    double computeNDTScore(const Scan&, const NDTGrid&, double invGridSize, Eigen::MatrixXi& gridIndices);    
 private:
-    double getNewtonData(Matrix3d&, Vector3d&, double,double, double,
-		    Matrix3d&, const Vector2d&,
+    double getNewtonData(Eigen::Matrix3d&, Eigen::Vector3d&, double,double, double,
+		    Eigen::Matrix3d&, const Eigen::Vector2d&,
 		    const GaussianCell&);    
-    void makePositiveDefinite(Matrix3d&, bool&, int );    
+    void makePositiveDefinite(Eigen::Matrix3d&, bool&, int );    
 public:
     void ndtScanMatchHP(const Scan&, const Scan&, 
-		    double, Pose2D&, Matrix3d&,
+		    double, Pose2D&, Eigen::Matrix3d&,
 		    int , double , 
 		    double , double , 
 		    double , bool );

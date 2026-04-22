@@ -152,7 +152,7 @@ ScanMatchCache::CacheValue PoseGraph::cached_scan_match(
     }
     
 	Pose2D result_p2d;
-		Matrix3d hessian;
+	Eigen::Matrix3d hessian;
     this->matcher.ndtScanMatchHP(
         scan2, scan1, grid_size, result_p2d,hessian, max_iters, 1e-6,
         init_params[0], init_params[1], init_params[2],

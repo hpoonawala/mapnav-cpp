@@ -1,8 +1,10 @@
 .DS_Store
-**/*.o
 **/*.txt
 **/*.exe
 README.pdf
 app/
-occupancy_grid_slam_final.pgm
-
+**/*.pgm
+**/*.md
+data/
+build/
+src/DDRCappController_feb25.cpp
