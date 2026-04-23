@@ -41,6 +41,7 @@ inline Scan transformScanToPose(const Scan& scan, const Pose2D& pose) {
 struct Frame {
 	Scan scan;   // body-frame
 	Pose2D pose;   // world-frame pose estimate at capture time
+	double match_score;
 };
 
 struct FrameHistory {

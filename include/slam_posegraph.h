@@ -99,6 +99,7 @@ public:
         const std::vector<std::vector<int>>& edges,
         const std::vector<int>& nodes,
         const std::vector<Eigen::Vector3d>& relative_poses,
+        const std::vector<double>& weights,
         Eigen::SparseMatrix<double>& A_mat,
         Eigen::VectorXd& b_vec,
         std::map<int, int>& vertex_dict);
@@ -113,8 +114,12 @@ public:
         const std::map<int, int>& vertex_dict);
     
     std::vector<std::vector<int>>& get_previous_graph();
-    std::map<std::pair<int, int>, Eigen::Vector3d>& get_previous_results();
     double get_grid_size() const;
+
+    struct EdgeResult {
+        Eigen::Vector3d relative_pose;
+        Eigen::Matrix3d hessian;
+    };
     
 	// Main mapping function
 	std::pair<std::vector<Pose2D>, std::vector<int>> optimize(
@@ -124,7 +129,7 @@ private:
 	NDTScanMatcher matcher;
     ScanMatchCache cache_;
     std::vector<std::vector<int>> previous_graph_;
-    std::map<std::pair<int, int>, Eigen::Vector3d> previous_results_;
+    std::map<std::pair<int, int>, EdgeResult> previous_edges_;
     Pose2D initial_pose_;
     double grid_size_;
 };

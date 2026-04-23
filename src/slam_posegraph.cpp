@@ -172,6 +172,7 @@ void PoseGraph::build_sparse_system(
     const std::vector<std::vector<int>>& edges,
     const std::vector<int>& nodes,
     const std::vector<Eigen::Vector3d>& relative_poses,
+    const std::vector<double>& weights,
     Eigen::SparseMatrix<double>& A_mat,
     Eigen::VectorXd& b_vec,
     std::map<int, int>& vertex_dict) {
@@ -197,15 +198,16 @@ void PoseGraph::build_sparse_system(
         int node2 = edges[i][1];
         int idx1 = vertex_dict[node1];
         int idx2 = vertex_dict[node2];
-        
+        double w = weights[i];
+
         for (int j = 0; j < 3; ++j) {
             int row_idx = 3 * i + j;
             int col_idx1 = 3 * idx1 + j;
             int col_idx2 = 3 * idx2 + j;
-            
-            triplets.push_back(Eigen::Triplet<double>(row_idx, col_idx2, 1.0));
-            triplets.push_back(Eigen::Triplet<double>(row_idx, col_idx1, -1.0));
-            b_vec[row_idx] = relative_poses[i][j];
+
+            triplets.push_back(Eigen::Triplet<double>(row_idx, col_idx2,  w));
+            triplets.push_back(Eigen::Triplet<double>(row_idx, col_idx1, -w));
+            b_vec[row_idx] = w * relative_poses[i][j];
         }
     }
     
@@ -263,10 +265,6 @@ std::vector<std::vector<int>>& PoseGraph::get_previous_graph() {
     return previous_graph_;
 }
 
-std::map<std::pair<int, int>, Eigen::Vector3d>& PoseGraph::get_previous_results() {
-    return previous_results_;
-}
-
 double PoseGraph::get_grid_size() const {
     return grid_size_;
 }
@@ -278,45 +276,41 @@ std::pair<std::vector<Pose2D>, std::vector<int>> PoseGraph::optimize(
 
     int n = frames.size();
     
-    auto current_edges = build_graph_edges(n, 0, ind_interval);
-    auto current_nodes = get_nodes_from_edges(current_edges, n, ind_interval);
-    
+    // Deduplicate edges via set (build_graph_edges can produce duplicates for small n)
     std::set<std::pair<int, int>> current_edge_set;
-    for (const auto& edge : current_edges) {
-        int a = std::min(edge[0], edge[1]);
-        int b = std::max(edge[0], edge[1]);
-        current_edge_set.insert({a, b});
+    for (const auto& edge : build_graph_edges(n, 0, ind_interval)) {
+        current_edge_set.insert({std::min(edge[0], edge[1]), std::max(edge[0], edge[1])});
     }
-    
+    std::vector<std::vector<int>> unique_edges;
+    unique_edges.reserve(current_edge_set.size());
+    for (const auto& ep : current_edge_set)
+        unique_edges.push_back({ep.first, ep.second});
+
+    auto current_nodes = get_nodes_from_edges(unique_edges, n, ind_interval);
+
     std::vector<std::vector<int>> new_edges;
     auto& prev_graph = get_previous_graph();
-    
+
     if (prev_graph.empty()) {
-        new_edges = current_edges;
+        new_edges = unique_edges;
         std::cout << "First run: computing " << new_edges.size() << " edges" << std::endl;
     } else {
         std::set<std::pair<int, int>> previous_edge_set;
         for (const auto& edge : prev_graph) {
-            int a = std::min(edge[0], edge[1]);
-            int b = std::max(edge[0], edge[1]);
-            previous_edge_set.insert({a, b});
+            previous_edge_set.insert({std::min(edge[0], edge[1]), std::max(edge[0], edge[1])});
         }
-        
-        for (const auto& edge_pair : current_edge_set) {
-            if (previous_edge_set.find(edge_pair) == previous_edge_set.end()) {
-                new_edges.push_back({edge_pair.first, edge_pair.second});
-            }
+        for (const auto& ep : current_edge_set) {
+            if (previous_edge_set.find(ep) == previous_edge_set.end())
+                new_edges.push_back({ep.first, ep.second});
         }
-        std::cout << "Incremental: computing " << new_edges.size() 
-                  << " new edges out of " << current_edges.size() << " total" << std::endl;
+        std::cout << "Incremental: computing " << new_edges.size()
+                  << " new edges out of " << unique_edges.size() << " total" << std::endl;
     }
-    
-    auto& previous_results = get_previous_results();
-    
+
     for (const auto& edge : new_edges) {
         int ind_one = edge[0];
         int ind_two = edge[1];
-        
+
         Eigen::Vector3d rel_trans = relative_transform(frames[ind_one].pose, frames[ind_two].pose);
         Eigen::Vector3d inv_trans = invert_transform(rel_trans);
 
@@ -324,49 +318,54 @@ std::pair<std::vector<Pose2D>, std::vector<int>> PoseGraph::optimize(
             frames[ind_one].scan, frames[ind_two].scan,
             get_grid_size(), inv_trans, 500
         );
-        
+
         Eigen::Vector3d manual_pose(
             cached_result.match_result[0],
             cached_result.match_result[1],
             cached_result.match_result[2]
         );
-        
+
         Eigen::Vector3d inv_pose = invert_transform(manual_pose);
         Eigen::Vector2d rotated = rotated_relative_position(
             inv_pose[0], inv_pose[1], frames[ind_one].pose.theta_
         );
-        
-        int a = std::min(ind_one, ind_two);
-        int b = std::max(ind_one, ind_two);
-        previous_results[{a, b}] = Eigen::Vector3d(rotated[0], rotated[1], -manual_pose[2]);
+
+        previous_edges_[{ind_one, ind_two}] = {
+            Eigen::Vector3d(rotated[0], rotated[1], -manual_pose[2]),
+            cached_result.hessian
+        };
     }
-    
+
+    // unique_edges always has a < b, so no direction reversal needed
     std::vector<Eigen::Vector3d> relative_poses;
-    for (const auto& edge : current_edges) {
-        int a = std::min(edge[0], edge[1]);
-        int b = std::max(edge[0], edge[1]);
-        
-        auto it = previous_results.find({a, b});
-        if (it != previous_results.end()) {
-            Eigen::Vector3d stored_pose = it->second;
-            if (edge[0] > edge[1]) {
-                stored_pose = -stored_pose;
-            }
-            relative_poses.push_back(stored_pose);
+    std::vector<double> weights;
+    for (const auto& edge : unique_edges) {
+        auto it = previous_edges_.find({edge[0], edge[1]});
+        if (it != previous_edges_.end()) {
+            relative_poses.push_back(it->second.relative_pose);
+            weights.push_back(it->second.hessian.trace());
         } else {
             std::cout << "Warning: Missing result for edge [" << edge[0] << ", " << edge[1] << "]" << std::endl;
             relative_poses.push_back(Eigen::Vector3d::Zero());
+            weights.push_back(0.0);
         }
     }
-    
-    prev_graph = current_edges;
-    
+
+    // Normalize weights to [0,1]; anchor constraint stays at 1.0 as the reference
+    if (!weights.empty()) {
+        double max_w = *std::max_element(weights.begin(), weights.end());
+        if (max_w > 0.0)
+            for (auto& w : weights) w /= max_w;
+    }
+
+    prev_graph = unique_edges;
+
     Eigen::SparseMatrix<double> A_mat;
     Eigen::VectorXd b_vec;
     std::map<int, int> vertex_dict;
-    
-    build_sparse_system(current_edges, current_nodes, relative_poses,
-                                   A_mat, b_vec, vertex_dict);
+
+    build_sparse_system(unique_edges, current_nodes, relative_poses, weights,
+                        A_mat, b_vec, vertex_dict);
     
     Eigen::VectorXd solution = solve_pose_graph(A_mat, b_vec);
     

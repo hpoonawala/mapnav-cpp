@@ -34,7 +34,7 @@ void Mapper::update_scans(Scan& scan_polar) {
 	Scan scan = polarToCartesian(scan_polar, scan_polar.rows());
 	int n = frame_history.size();
 	if (n == 0) {
-		frame_history.append({scan, Pose2D(curr_pose.x_, curr_pose.y_, curr_pose.theta_)});
+		frame_history.append({scan, Pose2D(curr_pose.x_, curr_pose.y_, curr_pose.theta_),0.0});
 	} else {
 		double scan_match_score;
 		Scan prev_scan = frame_history.last_scan();

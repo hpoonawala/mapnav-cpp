@@ -167,16 +167,20 @@ int main(int argc, const char * argv[]) {
 			// already Cartesian, so we replicate the rest of update_scans directly.
 			int n = mapper.frame_history.size();
 			if (n == 0) {
-				mapper.frame_history.append({scans[k], mapper.curr_pose});
+				mapper.frame_history.append({scans[k], mapper.curr_pose,0.0});
 			} else {
-				double final_score;
+				double scan_match_score;
 				Scan prev_scan = mapper.frame_history.last_scan();
 				Pose2D delta;
 				Eigen::Matrix3d hessian;
-				mapper.matcher.ndtScanMatchHP(prev_scan, scans[k], mapper.gridsize, delta, final_score,hessian, 60, 1e-6, 0.0, 0.0, 0.0, false);
+				mapper.matcher.ndtScanMatchHP(prev_scan, scans[k], mapper.gridsize, delta, scan_match_score,hessian, 60, 1e-6, 0.0, 0.0, 0.0, false);
+				if (scan_match_score > 150.0 ) {
+				cout << "main_load score high: " << scan_match_score << "\n";
+				mapper.matcher.ndtScanMatchHP(prev_scan, scans[k], mapper.gridsize * 2.0, delta, scan_match_score, hessian, 200, 1e-6, delta[0], delta[1], 0.0, false);
+				}
+				cout << "main_load score: " << scan_match_score << "\n";
 				move_pose_local(mapper.curr_pose, delta);
 				mapper.frame_history.append({scans[k], mapper.curr_pose});
-				cout << "main_load score: " << final_score << "\n";
 			}
 			if (k % 10 == 0 && k > 5) {
 				bool slam_launch_res = mapper.slam_thread.tryLaunch(mapper.frame_history, navigation_goal);
