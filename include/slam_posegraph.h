@@ -18,6 +18,7 @@
 #include <Eigen/Dense>
 #include "pose.h"
 #include "scan_match_11.h"
+#include "frameHistory.h"
 
 // Forward declaration for scan matching
 namespace scan_match {
@@ -117,9 +118,8 @@ public:
     
 	// Main mapping function
 	std::pair<std::vector<Pose2D>, std::vector<int>> optimize(
-		const std::vector<Eigen::MatrixXd>& ,
-		const std::vector<Pose2D>& ,
-		int);
+		const std::vector<Frame>& frames,
+		int ind_interval);
 private:
 	NDTScanMatcher matcher;
     ScanMatchCache cache_;

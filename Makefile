@@ -54,8 +54,8 @@ $(BUILDDIR)/wtchdog_lidar.exe : $(SRCDIR)/wtchdog_lidar.cpp $(EXTRA_OBJ) $(BUILD
 $(BUILDDIR)/main.exe : $(SRCDIR)/main.cpp $(EXTRA_OBJ)
 	g++ $(CXXFLAGS) $(C_INCLUDES) $(LDFLAGS) $< $(SRCDIR)/OccupancyGrid.cpp $(SRCDIR)/slam_posegraph.cpp $(SRCDIR)/pose.cpp $(SRCDIR)/scan_match_11.cpp $(LD_LIBS) -o $@
 
-$(BUILDDIR)/main_load.exe : $(SRCDIR)/main_load.cpp $(EXTRA_OBJ) $(BUILDDIR)/mapper.o
-	g++ $(CXXFLAGS) $(C_INCLUDES) $(LDFLAGS) $< $(SRCDIR)/OccupancyGrid.cpp $(SRCDIR)/slam_posegraph.cpp $(SRCDIR)/pose.cpp $(SRCDIR)/scan_match_11.cpp $(SRCDIR)/mapper.cpp $(LD_LIBS) -o $@
+$(BUILDDIR)/main_load.exe : $(SRCDIR)/main_load.cpp $(EXTRA_OBJ) $(BUILDDIR)/DDRCappController.o $(BUILDDIR)/SerialWriter.o $(BUILDDIR)/TelemetryServer.o $(BUILDDIR)/lidarScanner.o $(BUILDDIR)/lidarThread.o $(BUILDDIR)/MotorController.o $(BUILDDIR)/slamThread.o 
+	g++ $(CXXFLAGS) $(C_INCLUDES) $(LDFLAGS) $^ $(LD_LIBS) -o $@
 
 $(BUILDDIR)/lidarScanner.o : $(SRCDIR)/lidarScanner.cpp
 	g++ $(CXXFLAGS) -c $(C_INCLUDES) $< -o $@

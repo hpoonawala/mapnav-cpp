@@ -152,9 +152,10 @@ ScanMatchCache::CacheValue PoseGraph::cached_scan_match(
     }
     
 	Pose2D result_p2d;
+	double final_score;
 	Eigen::Matrix3d hessian;
     this->matcher.ndtScanMatchHP(
-        scan2, scan1, grid_size, result_p2d,hessian, max_iters, 1e-6,
+        scan2, scan1, grid_size, result_p2d,final_score,hessian, max_iters, 1e-6,
         init_params[0], init_params[1], init_params[2],
          false
     );
@@ -272,11 +273,10 @@ double PoseGraph::get_grid_size() const {
 
 // Main mapping function implementation
 std::pair<std::vector<Pose2D>, std::vector<int>> PoseGraph::optimize(
-    const std::vector<Eigen::MatrixXd>& scanlist,
-    const std::vector<Pose2D>& odom_poses,
+    const std::vector<Frame>& frames,
     int ind_interval) {
-    
-    int n = scanlist.size();
+
+    int n = frames.size();
     
     auto current_edges = build_graph_edges(n, 0, ind_interval);
     auto current_nodes = get_nodes_from_edges(current_edges, n, ind_interval);
@@ -317,11 +317,11 @@ std::pair<std::vector<Pose2D>, std::vector<int>> PoseGraph::optimize(
         int ind_one = edge[0];
         int ind_two = edge[1];
         
-        Eigen::Vector3d rel_trans = relative_transform(odom_poses[ind_one], odom_poses[ind_two]);
+        Eigen::Vector3d rel_trans = relative_transform(frames[ind_one].pose, frames[ind_two].pose);
         Eigen::Vector3d inv_trans = invert_transform(rel_trans);
-        
+
         auto cached_result = cached_scan_match(
-            scanlist[ind_one], scanlist[ind_two],
+            frames[ind_one].scan, frames[ind_two].scan,
             get_grid_size(), inv_trans, 500
         );
         
@@ -333,7 +333,7 @@ std::pair<std::vector<Pose2D>, std::vector<int>> PoseGraph::optimize(
         
         Eigen::Vector3d inv_pose = invert_transform(manual_pose);
         Eigen::Vector2d rotated = rotated_relative_position(
-            inv_pose[0], inv_pose[1], odom_poses[ind_one].theta_
+            inv_pose[0], inv_pose[1], frames[ind_one].pose.theta_
         );
         
         int a = std::min(ind_one, ind_two);
@@ -370,6 +370,10 @@ std::pair<std::vector<Pose2D>, std::vector<int>> PoseGraph::optimize(
     
     Eigen::VectorXd solution = solve_pose_graph(A_mat, b_vec);
     
+    std::vector<Pose2D> odom_poses;
+    odom_poses.reserve(frames.size());
+    for (const auto& f : frames) odom_poses.push_back(f.pose);
+
     auto updated_poses = update_poses_efficiently(
         odom_poses, solution, current_nodes, vertex_dict
     );

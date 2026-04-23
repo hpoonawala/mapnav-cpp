@@ -14,18 +14,8 @@ bool SlamThread::tryLaunch(FrameHistory& frame_history,  const Pose2D& goal){
 	// Grab snapshot
 	snapshot_ = frame_history.snapshot();
 
-	// Convert it into a sequence of scans and poses (possibly doing this to keep mapping_optimized unchanged despite moving to use Frame)
 	future_ = std::async(std::launch::async, [this, goal]() {
-			std::vector<Scan> scans;
-			std::vector<Pose2D> poses;
-			scans.reserve(snapshot_.size());
-			poses.reserve(snapshot_.size());
-			for (size_t i = 0; i < snapshot_.size(); i++) {
-			scans.push_back(snapshot_[i].scan);
-			poses.push_back(snapshot_[i].pose);
-			}
-
-			auto result = posegraph_.optimize(scans, poses, ind_interval_);
+			auto result = posegraph_.optimize(snapshot_, ind_interval_);
 			corrected_poses_ = result.first;
 			nodes_ = result.second;
 
@@ -67,9 +57,6 @@ bool SlamThread::tryCollect(FrameHistory& frame_history, OccupancyGrid& grid, Po
 	curr_pose.theta_ = corrected_poses_.back().theta_;
 	path = new_path_;
 	return true;
-
-	return true;
-
 }
 
 void SlamThread::wait(){

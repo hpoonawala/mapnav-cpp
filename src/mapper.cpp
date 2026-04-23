@@ -15,7 +15,7 @@
 #include "../include/timer.h"
 
 Mapper::Mapper() :	matcher {},
-					slam_thread {matcher, Pose2D(0.0,0.0,0.0), 0.85,2,OccupancyGrid(10.0,10.0,0.02)},
+					slam_thread {matcher, Pose2D(0.0,0.0,0.0), 0.85,5,OccupancyGrid(10.0,10.0,0.02)},
 					grid {OccupancyGrid(10.0,10.0,0.02)},
 					gridsize{0.85},
 					curr_pose{Pose2D(0.0,0.0,0.0)}
@@ -36,11 +36,12 @@ void Mapper::update_scans(Scan& scan_polar) {
 	if (n == 0) {
 		frame_history.append({scan, Pose2D(curr_pose.x_, curr_pose.y_, curr_pose.theta_)});
 	} else {
+		double scan_match_score;
 		Scan prev_scan = frame_history.last_scan();
 		Pose2D result;
 		Eigen::Matrix3d hessian;
 		Timer timer;
-		matcher.ndtScanMatchHP(prev_scan, scan, gridsize, result, hessian, 60, 1e-6, 0.0, 0.0, 0.0, false);
+		matcher.ndtScanMatchHP(prev_scan, scan, gridsize, result, scan_match_score, hessian, 60, 1e-6, 0.0, 0.0, 0.0, false);
 		timer.mark("scan match: "); timer.reset();
 		move_pose_local(curr_pose, result); // propagate pose in memory by scan match result
 		frame_history.append({scan, Pose2D(curr_pose.x_, curr_pose.y_, curr_pose.theta_)});

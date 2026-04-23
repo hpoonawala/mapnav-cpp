@@ -87,7 +87,7 @@ private:
     void makePositiveDefinite(Eigen::Matrix3d&, bool&, int );    
 public:
     void ndtScanMatchHP(const Scan&, const Scan&, 
-		    double, Pose2D&, Eigen::Matrix3d&,
+		    double, Pose2D&, double&, Eigen::Matrix3d&,
 		    int , double , 
 		    double , double , 
 		    double , bool );

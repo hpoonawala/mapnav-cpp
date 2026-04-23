@@ -95,21 +95,20 @@ std::vector<Eigen::MatrixXd> loadLidarScans(const std::string& filename) {
         
         std::cout << "elements: " << values.size() << std::endl;
         
-        // Extract x and y coordinates
-        // x: values[0], values[2], values[4], ... (even indices)
-        // y: values[1], values[3], values[5], ... (odd indices)
-        int num_points = values.size() / 2;
-        
+        // Each point is (angle_rad, dist_m, quality) — 3 values per point
+        int num_points = values.size() / 3;
+
         if (num_points == 0) {
             continue;
         }
-        
-        // Create Eigen matrix with shape (num_points, 2)
+
+        // Convert polar to Cartesian using same convention as polarToCartesian in mapper.cpp
         Eigen::MatrixXd scan(num_points, 2);
-        
         for (int i = 0; i < num_points; ++i) {
-            scan(i, 0) = values[2 * i];      // x coordinate
-            scan(i, 1) = -values[2 * i + 1]; // y coordinate (negated)
+            double angle = values[3 * i];
+            double dist  = values[3 * i + 1];
+            scan(i, 0) =  dist * cos(angle);  // x
+            scan(i, 1) = -dist * sin(angle);  // y
         }
         
         scanlist.push_back(scan);
@@ -126,7 +125,7 @@ using namespace std;
 using namespace Eigen;
 
 int main(int argc, const char * argv[]) {
-    std::string filename = "lidar_data.csv";
+    std::string filename = "data/local_data5.txt";
     
     if (argc > 1) {
         filename = argv[1];
@@ -144,6 +143,7 @@ int main(int argc, const char * argv[]) {
         std::cout << "First scan first point: [" << scans[0](0, 0) 
                   << ", " << scans[0](0, 1) << "]" << std::endl;
     }
+	Pose2D navigation_goal(1.0,  0.0, 0.0);
 	Mapper mapper;
     do {
 
@@ -160,10 +160,33 @@ int main(int argc, const char * argv[]) {
 		int loop_iters = scans.size();
 		printf("n scans: %d",loop_iters);
 		for(int k=0;k<loop_iters;k++){
-			printf("Loop: %d / %d\n",k,loop_iters); 
+			/* printf("Loop: %d / %d\n",k,loop_iters); */ 
 			//We have updates, get a scan match
-			std::cout <<"\nrows: " << scans[k].rows() << "\n";
-			mapper.update_scans(scans[k]);
+			/* std::cout <<"\nrows: " << scans[k].rows() << "\n"; */
+			// update_scans applies polarToCartesian internally; scans from file are
+			// already Cartesian, so we replicate the rest of update_scans directly.
+			int n = mapper.frame_history.size();
+			if (n == 0) {
+				mapper.frame_history.append({scans[k], mapper.curr_pose});
+			} else {
+				double final_score;
+				Scan prev_scan = mapper.frame_history.last_scan();
+				Pose2D delta;
+				Eigen::Matrix3d hessian;
+				mapper.matcher.ndtScanMatchHP(prev_scan, scans[k], mapper.gridsize, delta, final_score,hessian, 60, 1e-6, 0.0, 0.0, 0.0, false);
+				move_pose_local(mapper.curr_pose, delta);
+				mapper.frame_history.append({scans[k], mapper.curr_pose});
+				cout << "main_load score: " << final_score << "\n";
+			}
+			if (k % 10 == 0 && k > 5) {
+				bool slam_launch_res = mapper.slam_thread.tryLaunch(mapper.frame_history, navigation_goal);
+				cout << "slam_launch_res: " << slam_launch_res << "\n";
+				bool slam_collect_res = false;
+				while (!slam_collect_res) {
+					slam_collect_res = mapper.slam_thread.tryCollect(mapper.frame_history, mapper.grid, mapper.curr_pose, mapper.path);
+					if (!slam_collect_res) delay(50);
+				}
+			}
 
 						// Scan matching goes here
 		}
@@ -171,33 +194,16 @@ int main(int argc, const char * argv[]) {
 		scan_file.close();
 	} while(0); // do once loop. why?
 				//
-	for (Pose p : mapper.world_poses){
-		std::cout << p[0] << " " << p[1] << " " << p[2] << "\n";
-	}
 				//
-	// done with Odom, but we have no odom data
-
-    std::cout << "\nRunning pose graph optimization..." << std::endl;
-	int ind_interval=2;
-    auto result = mapping_optimized(mapper.localScans, mapper.world_poses, mapper.posegraph, ind_interval);
-    mapper.world_poses = result.first;
-    auto nodes = result.second;
-    
-    std::cout << "Optimization complete!" << std::endl;
-	std::cout << "Optimized " << nodes.size() << " nodes" << std::endl;
-	Scan scan_curr;  // 100 points
-	Scan world_scan_curr;  // 100 points
-	int loop_iters = scans.size();
-	Pose2D curr_pose;
-	for(int k : nodes){
-		scan_curr=mapper.localScans[k];
-		curr_pose.x_ = mapper.world_poses[k][0];
-		curr_pose.y_ = mapper.world_poses[k][1];
-		curr_pose.theta_ = mapper.world_poses[k][2];
-		world_scan_curr = mapper.matcher.transformScanToPose(scan_curr,curr_pose);
-		mapper.grid.updateWithScan(world_scan_curr, mapper.world_poses[k]);
+	bool slam_launch_res = mapper.slam_thread.tryLaunch(mapper.frame_history, navigation_goal);
+	cout << "slam_launch_res: " << slam_launch_res << "\n";
+	bool slam_collect_res = false;
+	while (!slam_collect_res) {
+		slam_collect_res = mapper.slam_thread.tryCollect(mapper.frame_history, mapper.grid, mapper.curr_pose, mapper.path);
+		if (!slam_collect_res) delay(50);
 	}
-    mapper.grid.writeGridToFile("occupancy_grid_slam.txt", 3.0, 1.5);
-    mapper.grid.writePGMFile("occupancy_grid_slam.pgm");
+	cout << "slam_collect_res: " << slam_collect_res << "\n";
+	mapper.grid.writeGridToFile("occupancy_grid_slam.txt", 3.0, 1.5);
+	mapper.grid.writePGMFile("occupancy_grid_slam.pgm");
 	return 0;
 }

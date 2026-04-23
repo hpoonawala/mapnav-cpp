@@ -364,7 +364,7 @@ void NDTScanMatcher::makePositiveDefinite(Matrix3d& A, bool& isPD, int maxAttemp
 }
 
 void NDTScanMatcher::ndtScanMatchHP(const Scan& scan2, const Scan& scan1,
-				   double gridSize, Pose2D& result, Matrix3d& hessian,
+				   double gridSize, Pose2D& result, double& final_score, Matrix3d& hessian,
 				   int maxIters = 60, double tol = 1e-6,
 				   double txInit = 0.0, double tyInit = 0.0,
 				   double phiInit = 0.0, bool debug = false) {
@@ -404,6 +404,7 @@ void NDTScanMatcher::ndtScanMatchHP(const Scan& scan2, const Scan& scan1,
 	Scan transformedScanTest(nPoints, 2);
 	MatrixXi gridIndices(nPoints, 2);
 	double invGridSize = 1.0 / gridSize;
+	double score2 = 0.0;
 
 	for (int count = 0; count < maxIters; ++count) {
 		transformScanInPlace(transformedScan, scan1, tx, ty, phi);
@@ -412,7 +413,7 @@ void NDTScanMatcher::ndtScanMatchHP(const Scan& scan2, const Scan& scan1,
 		Amat.setZero();
 		bvec.setZero();
 
-		double score2 = 0.0;
+		score2 = 0.0;
 
 		// Compute grid indices in place
 		for (int i = 0; i < nPoints; ++i) {
@@ -482,6 +483,7 @@ void NDTScanMatcher::ndtScanMatchHP(const Scan& scan2, const Scan& scan1,
 		tx -= gradTx * alpha;
 		ty -= gradTy * alpha;
 		phi -= gradPhi * alpha;
+		final_score = score2;
 
 		// Check for convergence
 		if (abs(lambda2) < CONVERGENCE_TOL_LAMBDA) {
