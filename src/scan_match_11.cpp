@@ -405,6 +405,7 @@ void NDTScanMatcher::ndtScanMatchHP(const Scan& scan2, const Scan& scan1,
 	MatrixXi gridIndices(nPoints, 2);
 	double invGridSize = 1.0 / gridSize;
 	double score2 = 0.0;
+	Matrix3d AmatPD;
 
 	for (int count = 0; count < maxIters; ++count) {
 		transformScanInPlace(transformedScan, scan1, tx, ty, phi);
@@ -432,7 +433,7 @@ void NDTScanMatcher::ndtScanMatchHP(const Scan& scan2, const Scan& scan1,
 		}
 
 		// Make Hessian positive definite
-		Matrix3d AmatPD = Amat;
+		AmatPD = Amat;
 		bool isPD;
 		makePositiveDefinite(AmatPD, isPD);
 
@@ -502,7 +503,7 @@ void NDTScanMatcher::ndtScanMatchHP(const Scan& scan2, const Scan& scan1,
 	}
 
 	result = Pose2D(tx, ty, phi);
-	hessian = Amat;
+	hessian = AmatPD;
 }
 
 // Define static constants outside class

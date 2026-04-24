@@ -48,3 +48,21 @@ python3 telemetry_client.py --host 10.45.$raspip
 scp pi@10.45.$raspip:~/src/mapnav-cpp/occupancy_grid_slam.pgm slam.pgm
 scp pi@10.45.$raspip:~/src/mapnav-cpp/occupancy_grid_slam_final.pgm final_slam.pgm
 ```
+
+Changed the serial to be persistent, allowing for an IMU reader: 
+```
+Everything looks correct. Here's a summary of what changed and why:
+
+  SerialWriter — write_and_read() is now an instance method that reuses the already-open port. The old free function write_and_read_serial_message is a thin one-liner
+   wrapper around it (kept so MotorController callers still compile unchanged).
+
+  Mapper::update_scans — accepts dtheta_hint = 0.0 (default preserves all existing callers like main_load.cpp) and forwards it as the theta initial guess to
+  ndtScanMatchHP.
+
+  lidar_react.cpp — one persistent SerialWriter serial lives for the whole loop. Loop order is now: capture → request_imu (sends I.\n, parses float heading) →
+  update_scans(scan, dtheta) → control → send_cmd. The last_heading / have_heading guards mean the first iteration skips delta computation rather than passing
+  garbage.
+
+  The one thing to adapt to your hardware: the request_imu parser at the top of the new section expects I.<float>\n (e.g. I.1.5708\n). Adjust the substr(2) parsing if
+   your ESP32S3 response uses a different prefix length or format.
+```

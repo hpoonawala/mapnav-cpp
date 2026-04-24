@@ -19,7 +19,10 @@ public:
     
     // Write a message to the serial port
     void write(const std::string& message);
-    
+
+    // Write a message and read the response line (blocking, with timeout)
+    std::string write_and_read(const std::string& message, unsigned int timeout_ms = 1000);
+
     // Check if port is open
     bool is_open() const;
 };

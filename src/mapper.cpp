@@ -30,7 +30,7 @@ Scan polarToCartesian(Scan& scan, int n_samples) {
 	return cart_scan;
 }
 
-void Mapper::update_scans(Scan& scan_polar) {
+void Mapper::update_scans(Scan& scan_polar, double dtheta_hint) {
 	Scan scan = polarToCartesian(scan_polar, scan_polar.rows());
 	int n = frame_history.size();
 	if (n == 0) {
@@ -41,9 +41,9 @@ void Mapper::update_scans(Scan& scan_polar) {
 		Pose2D result;
 		Eigen::Matrix3d hessian;
 		Timer timer;
-		matcher.ndtScanMatchHP(prev_scan, scan, gridsize, result, scan_match_score, hessian, 60, 1e-6, 0.0, 0.0, 0.0, false);
+		matcher.ndtScanMatchHP(prev_scan, scan, gridsize, result, scan_match_score, hessian, 60, 1e-6, 0.0, 0.0, dtheta_hint, false);
 		timer.mark("scan match: "); timer.reset();
-		move_pose_local(curr_pose, result); // propagate pose in memory by scan match result
+		move_pose_local(curr_pose, result);
 		frame_history.append({scan, Pose2D(curr_pose.x_, curr_pose.y_, curr_pose.theta_)});
 	}
 }

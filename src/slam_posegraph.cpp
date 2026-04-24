@@ -168,6 +168,8 @@ ScanMatchCache::CacheValue PoseGraph::cached_scan_match(
     return result;
 }
 
+static const double HUBER_DELTA = 0.5;
+
 void PoseGraph::build_sparse_system(
     const std::vector<std::vector<int>>& edges,
     const std::vector<int>& nodes,
@@ -176,37 +178,39 @@ void PoseGraph::build_sparse_system(
     Eigen::SparseMatrix<double>& A_mat,
     Eigen::VectorXd& b_vec,
     std::map<int, int>& vertex_dict) {
-    
+
     int n_edges = edges.size();
     int n_nodes = nodes.size();
-    
+
     for (size_t i = 0; i < nodes.size(); ++i) {
         vertex_dict[nodes[i]] = i;
     }
-    
+
     int n_constraints = 3 * n_edges + 3;
     int n_variables = 3 * n_nodes;
-    
+
     A_mat.resize(n_constraints, n_variables);
     b_vec.resize(n_constraints);
     b_vec.setZero();
-    
+
     std::vector<Eigen::Triplet<double>> triplets;
-    
+
     for (size_t i = 0; i < edges.size(); ++i) {
         int node1 = edges[i][0];
         int node2 = edges[i][1];
         int idx1 = vertex_dict[node1];
         int idx2 = vertex_dict[node2];
-        double w = weights[i];
+        double r = relative_poses[i].norm();
+        double huber_w = (r <= HUBER_DELTA) ? 1.0 : HUBER_DELTA / r;
+        double w = weights[i] * huber_w;
 
         for (int j = 0; j < 3; ++j) {
             int row_idx = 3 * i + j;
             int col_idx1 = 3 * idx1 + j;
             int col_idx2 = 3 * idx2 + j;
 
-            triplets.push_back(Eigen::Triplet<double>(row_idx, col_idx2,  w));
-            triplets.push_back(Eigen::Triplet<double>(row_idx, col_idx1, -w));
+            triplets.push_back(Eigen::Triplet<double>(row_idx, col_idx2,  1.0));
+            triplets.push_back(Eigen::Triplet<double>(row_idx, col_idx1, -1.0));
             b_vec[row_idx] = w * relative_poses[i][j];
         }
     }
@@ -336,18 +340,27 @@ std::pair<std::vector<Pose2D>, std::vector<int>> PoseGraph::optimize(
         };
     }
 
+    static const double MIN_HESSIAN_TRACE = 10.0;
+
     // unique_edges always has a < b, so no direction reversal needed
+    std::vector<std::vector<int>> filtered_edges;
     std::vector<Eigen::Vector3d> relative_poses;
     std::vector<double> weights;
     for (const auto& edge : unique_edges) {
         auto it = previous_edges_.find({edge[0], edge[1]});
         if (it != previous_edges_.end()) {
+            double trace = it->second.hessian.eigenvalues().real().minCoeff();
+            if (trace < MIN_HESSIAN_TRACE) {
+                std::cout << "Rejecting edge [" << edge[0] << ", " << edge[1]
+                          << "] trace=" << trace << std::endl;
+                continue;
+            }
+			std::cout << "trace: " << trace << std::endl;
+            filtered_edges.push_back(edge);
             relative_poses.push_back(it->second.relative_pose);
-            weights.push_back(it->second.hessian.trace());
+            weights.push_back(trace);
         } else {
             std::cout << "Warning: Missing result for edge [" << edge[0] << ", " << edge[1] << "]" << std::endl;
-            relative_poses.push_back(Eigen::Vector3d::Zero());
-            weights.push_back(0.0);
         }
     }
 
@@ -364,7 +377,7 @@ std::pair<std::vector<Pose2D>, std::vector<int>> PoseGraph::optimize(
     Eigen::VectorXd b_vec;
     std::map<int, int> vertex_dict;
 
-    build_sparse_system(unique_edges, current_nodes, relative_poses, weights,
+    build_sparse_system(filtered_edges, current_nodes, relative_poses, weights,
                         A_mat, b_vec, vertex_dict);
     
     Eigen::VectorXd solution = solve_pose_graph(A_mat, b_vec);

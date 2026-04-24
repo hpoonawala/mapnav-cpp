@@ -62,6 +62,25 @@ using namespace sl;
 using namespace std;
 using namespace Eigen;
 
+struct ImuReading {
+	double heading; // fused heading in radians from ESP32S3
+	bool valid;
+};
+
+// Sends "I.\n" and parses response. ESP32S3 format: "I.+0045.32\n" (yaw in degrees, %+08.2f)
+ImuReading request_imu(SerialWriter& serial) {
+	try {
+		std::string resp = serial.write_and_read("I.\n", 500);
+		if (resp.size() > 2 && resp[0] == 'I' && resp[1] == '.') {
+			double yaw_deg = std::stod(resp.substr(2));
+			return {yaw_deg * M_PI / 180.0, true};
+		}
+	} catch (const std::exception& e) {
+		std::cerr << "IMU request failed: " << e.what() << std::endl;
+	}
+	return {0.0, false};
+}
+
 class ScanSaver {
 	public:
 		ScanSaver(const char* data_target) {
@@ -116,6 +135,7 @@ int main(int argc, const char * argv[]) {
 	LidarThread lidar(opt_channel_param_first,opt_channel_param_second);
 	Scan scan_curr;  // 100 points, range scan
 	ScanSaver scan_saver(SCAN_DATA_FILE);
+	SerialWriter serial(MOTOR_PORT);
 
 	// Start telemetry server
 	TelemetryServer telemetry(8765);
@@ -132,6 +152,8 @@ int main(int argc, const char * argv[]) {
 	Timer timer; // to time events. .reset() and .mark(string)
 	Timer slam_timer; // to time events. .reset() and .mark(string)
 	int n_frames =0;
+	double last_heading = 0.0;
+	bool have_heading = false;
 	for(int k=0;k<loop_iters;k++){
 		n_frames = mapper.frame_history.size();
 
@@ -143,7 +165,16 @@ int main(int argc, const char * argv[]) {
 		} // but will not run SLAM
 
 		printf("Loop: %d / %d scans: %d\n",k,loop_iters,n_frames); 
-		mapper.update_scans(scan_curr);
+		// 2. Request IMU heading from ESP32S3 and compute delta
+		double dtheta_hint = 0.0;
+		ImuReading imu = request_imu(serial);
+		if (imu.valid) {
+			if (have_heading)
+				dtheta_hint = Pose2D::normalizeAngle(imu.heading - last_heading);
+			last_heading = imu.heading;
+			have_heading = true;
+		}
+		mapper.update_scans(scan_curr,dtheta_hint);
 		std::cout << "Current pose according to mapper:" << mapper.curr_pose << "\n";
 		timer.mark("initial NM Time elapsed: "); timer.reset();
 		// Publish pose to telemetry clients occasionally

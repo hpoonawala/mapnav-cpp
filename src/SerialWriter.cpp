@@ -67,67 +67,50 @@ void write_serial_message(const std::string& port_name, const std::string& messa
     }
 }
 
-// Read and write serial message with response (equivalent to Python with statement)
+std::string SerialWriter::write_and_read(const std::string& message, unsigned int timeout_ms) {
+    write(message);
+
+    std::this_thread::sleep_for(std::chrono::milliseconds(10));
+
+    asio::streambuf receive_buffer;
+    asio::error_code ec;
+    asio::steady_timer timer(io_context);
+    timer.expires_after(std::chrono::milliseconds(timeout_ms));
+
+    bool timeout_occurred = false;
+
+    asio::async_read_until(serial_port, receive_buffer, '\n',
+        [&](const asio::error_code& error, std::size_t) {
+            ec = error;
+            timer.cancel();
+        });
+
+    timer.async_wait([&](const asio::error_code& error) {
+        if (!error) {
+            timeout_occurred = true;
+            serial_port.cancel();
+        }
+    });
+
+    io_context.run();
+    io_context.restart();
+
+    if (timeout_occurred)
+        throw std::runtime_error("Timeout waiting for response");
+    if (ec && ec != asio::error::eof)
+        throw std::system_error(ec);
+
+    std::string response;
+    std::istream is(&receive_buffer);
+    std::getline(is, response);
+    return response;
+}
+
+// One-shot helper — opens, exchanges, closes
 std::string write_and_read_serial_message(const std::string& port_name,
                                           const std::string& message,
                                           unsigned int baud_rate,
-                                          unsigned int timeout_ms = 1000) {
-    try {
-        SerialWriter writer(port_name, baud_rate);
-        writer.write(message);
-
-        // Wait a bit for response to arrive
-        std::this_thread::sleep_for(std::chrono::milliseconds(10));
-
-        // Read response
-        asio::streambuf receive_buffer;
-        asio::error_code ec;
-
-        // Set up deadline timer for timeout
-        asio::steady_timer timer(writer.io_context);
-        timer.expires_after(std::chrono::milliseconds(timeout_ms));
-
-        std::size_t bytes_read = 0;
-        bool timeout_occurred = false;
-
-        // Start async read
-        asio::async_read_until(writer.serial_port, receive_buffer, '\n',
-            [&](const asio::error_code& error, std::size_t bytes) {
-                ec = error;
-                bytes_read = bytes;
-                timer.cancel();
-            });
-
-        // Start timer
-        timer.async_wait([&](const asio::error_code& error) {
-            if (!error) {
-                timeout_occurred = true;
-                writer.serial_port.cancel();
-            }
-        });
-
-        // Run until one completes
-        writer.io_context.run();
-        writer.io_context.restart();
-
-        if (timeout_occurred) {
-            throw std::runtime_error("Timeout waiting for response");
-        }
-
-        if (ec && ec != asio::error::eof) {
-            throw std::system_error(ec);
-        }
-
-        // Extract the response
-        std::string response;
-        std::istream is(&receive_buffer);
-        std::getline(is, response);
-
-        std::cout << "Received: " << response << std::endl;
-        return response;
-
-    } catch (const std::exception& e) {
-        std::cerr << "Error: " << e.what() << std::endl;
-        throw;
-    }
+                                          unsigned int timeout_ms) {
+    SerialWriter writer(port_name, baud_rate);
+    return writer.write_and_read(message, timeout_ms);
 }
