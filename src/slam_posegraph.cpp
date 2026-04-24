@@ -211,7 +211,7 @@ void PoseGraph::build_sparse_system(
 
             triplets.push_back(Eigen::Triplet<double>(row_idx, col_idx2,  1.0));
             triplets.push_back(Eigen::Triplet<double>(row_idx, col_idx1, -1.0));
-            b_vec[row_idx] = w * relative_poses[i][j];
+            b_vec[row_idx] = 1.0 * relative_poses[i][j];
         }
     }
     

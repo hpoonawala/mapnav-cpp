@@ -162,7 +162,7 @@ int main(int argc, const char * argv[]) {
 			/* cout <<"delay 10ms\n"; */ 
 			delay(10); 
 			continue;
-		} // but will not run SLAM
+		} // but will not run SLAM, could lead to a very delayed SLAM update if lidar doesn't return for a while despite moving
 
 		printf("Loop: %d / %d scans: %d\n",k,loop_iters,n_frames); 
 		// 2. Request IMU heading from ESP32S3 and compute delta
@@ -170,11 +170,13 @@ int main(int argc, const char * argv[]) {
 		ImuReading imu = request_imu(serial);
 		if (imu.valid) {
 			if (have_heading)
+				std::cout << "imu: " << imu.heading << "\n";
 				dtheta_hint = Pose2D::normalizeAngle(imu.heading - last_heading);
 			last_heading = imu.heading;
 			have_heading = true;
 		}
 		mapper.update_scans(scan_curr,dtheta_hint);
+		scan_saver.save(scan_curr);
 		std::cout << "Current pose according to mapper:" << mapper.curr_pose << "\n";
 		timer.mark("initial NM Time elapsed: "); timer.reset();
 		// Publish pose to telemetry clients occasionally

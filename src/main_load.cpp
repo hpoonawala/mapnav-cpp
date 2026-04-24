@@ -158,6 +158,7 @@ int main(int argc, const char * argv[]) {
 
 		// This does it once, then does the histogram and display. D
 		int loop_iters = scans.size();
+		if (argc > 2) loop_iters = strtoul(argv[2], NULL, 10);
 		printf("n scans: %d",loop_iters);
 		for(int k=0;k<loop_iters;k++){
 			/* printf("Loop: %d / %d\n",k,loop_iters); */ 
@@ -166,6 +167,7 @@ int main(int argc, const char * argv[]) {
 			// update_scans applies polarToCartesian internally; scans from file are
 			// already Cartesian, so we replicate the rest of update_scans directly.
 			int n = mapper.frame_history.size();
+			cout << "scan: " << n << std::endl;
 			if (n == 0) {
 				mapper.frame_history.append({scans[k], mapper.curr_pose,0.0});
 			} else {
@@ -173,10 +175,12 @@ int main(int argc, const char * argv[]) {
 				Scan prev_scan = mapper.frame_history.last_scan();
 				Pose2D delta;
 				Eigen::Matrix3d hessian;
-				mapper.matcher.ndtScanMatchHP(prev_scan, scans[k], mapper.gridsize, delta, scan_match_score,hessian, 60, 1e-6, 0.0, 0.0, 0.0, false);
+				mapper.matcher.ndtScanMatchHP(prev_scan, scans[k], mapper.gridsize, delta, scan_match_score,hessian, 60, 1e-6, 0.0, 0.0, 0.0, true);
 				if (scan_match_score > 150.0 ) {
 				cout << "main_load score high: " << scan_match_score << "\n";
-				mapper.matcher.ndtScanMatchHP(prev_scan, scans[k], mapper.gridsize * 2.0, delta, scan_match_score, hessian, 200, 1e-6, delta[0], delta[1], 0.0, false);
+				mapper.matcher.ndtScanMatchHP(prev_scan, scans[k], mapper.gridsize * 2.0, delta, scan_match_score, hessian, 200, 1e-6, 0.0, 0.0, 0.0, true);
+				cout << "main_load score high: " << scan_match_score << "\n";
+				mapper.matcher.ndtScanMatchHP(prev_scan, scans[k], mapper.gridsize , delta, scan_match_score, hessian, 200, 1e-6, delta[0], delta[1], delta[2], true);
 				}
 				cout << "main_load score: " << scan_match_score << "\n";
 				move_pose_local(mapper.curr_pose, delta);
